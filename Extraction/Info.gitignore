@@ -1,5 +1,0 @@
-DB_HOST=138.100.82.184        # eller IP-adress till servern
-DB_PORT=2345           # standardport för PostgreSQL
-DB_NAME=2207        # namnet på databasen
-DB_USER=lectura       # ditt db-användarnamn
-DB_PASSWORD='ncorrea#2022'   # ditt lösenord

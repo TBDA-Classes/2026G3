@@ -1,6 +1,0 @@
-database:
-  user: "lectura"
-  password: "ncorrea#2022"
-  host: "138.100.82.184"
-  port: 2345
-  dbname: "2207"
