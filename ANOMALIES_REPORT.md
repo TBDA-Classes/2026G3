@@ -12,13 +12,13 @@ This report documents the application of cleaning rules and the identification o
 - **Scalability:** Once validated on this primary file, the Python script uses a multi-sheet dictionary iteration (`pandas`) to seamlessly replicate the cleaning pipeline across all remaining floor datasets.
 - 
 ## 3. Quantitative Summary by Sheet (NaN Values Created)
-| Sheet (Device) | Temperature (NaN) | Humidity (NaN) | Luminosity (NaN) | Pressure (NaN) |
+| Sheet (Device) | Temperature (NaN) | Humidity (NaN) | Luminosity (NaN) | Pres(NaN) |
 | :--- | :--- | :--- | :--- | :--- |
-| **Emerg. Lighting** | 2035 | 2036 |13597 | 22293|
-| **Lighting** | 2537| 2538| 16327|22801 |
-| **Hand Dryer** | 2083 |2083 |13861| 22161 |
-| **Plugs & Sockets** | 2267 | 2267 | 14786 | 22421 |
-| **RACK** | | 23|23 |1217| 10923 |
+| **Emerg. Lighting** | 2035 | 2036 |13597 | 
+| **Lighting** | 2537| 2538| 16327|
+| **Hand Dryer** | 2083 |2083 |13861| 
+| **Plugs & Sockets** | 2267 | 2267 | 14786 | 
+| **RACK** | | 23|23 |1217| 
 
 ## 4. Observations and Analysis
 -Environmental stability: Temperature and Humidity sensors show consistent and reliable behavior across all zones 
