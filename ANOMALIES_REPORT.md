@@ -4,9 +4,7 @@ This report documents the application of cleaning rules and the identification o
 
 ## 1. Applied Rules (Hypothesis B2)
 - **Temperature & Humidity:** Conversion of values equal to `0` to `NaN` (physically impossible values indoors, indicating a sensor outage or failure).
-- **Luminosity:** Conversion of zeros to `NaN` only during daytime (between 7:00 AM and 7:00 PM).
-- **Pressure:** Conversion of zeros to `NaN` if the associated temperature is present.
-- 
+- **Luminosity:** Conversion of zeros to `NaN` only during daytime (between 7:00 AM and 7:00 PM).- 
 ## 2. Test Conditions & Validation Approach
 - **Pilot Dataset:** Testing and rule verification were initially conducted and validated on a pilot dataset (`Storey1_SW_report_by_device.xlsx`) to ensure boundary conditions and physical logic behaved as expected.
 - **Scalability:** Once validated on this primary file, the Python script uses a multi-sheet dictionary iteration (`pandas`) to seamlessly replicate the cleaning pipeline across all remaining floor datasets.
