@@ -8,9 +8,9 @@ This is a product backlog: every item is a feature or value increment for a stak
 
 | | |
 |---|---|
-| **Status on** | **19 October 2026** (Sprint 2 in progress) |
+| **Status on** | **25 October 2026** (Sprint 2 in progress) |
 | **Items** | 32 · 20 High, 11 Medium, 1 Low |
-| **Progress** | 🟢 11 Complete · 🟡 4 In Progress · 🔵 17 Not Started · 🟠 0 Overdue · ⚪ 0 On Hold |
+| **Progress** | 🟢 12 Complete · 🟡 3 In Progress · 🔵 17 Not Started · 🟠 0 Overdue · ⚪ 0 On Hold |
 | **Sprints** | 1 = 1–14 October · 2 = 15–28 October · 3 = 29 October – 11 November · 4 = 12–25 November · Post = 1–14 December |
 
 **Status:** 🔵 Not Started · 🟡 In Progress · 🟢 Complete · 🟠 Overdue · ⚪ On Hold  
@@ -35,7 +35,7 @@ This is a product backlog: every item is a feature or value increment for a stak
 | F9.3 | In Progress | 🟢 Complete | Experiment Logbook with six entries in chronological order – 05/10 (subteam A pipeline), 08/10 (v0.1 pilot), 17/10 (v0.3 dataset), 17/10 (baselines), 19/10 (consumption profiles) and 19/10/2026 (environment and occupancy) – and the CRISP-DM report for Sprint 1; both are updated every sprint |
 | F2.2 | Not Started | 🟡 In Progress | Team B rated every secondary series (Use / Use with caution / Do not use); characterisation and forecasts by subteam D still to do |
 | F3.1 | Not Started | 🟡 In Progress | Dataset v0.3 is one long table keyed by timestamp, zone, zone code (1NE…1SW) and load type; forecasts still to come |
-| F4.3 | Not Started | 🟡 In Progress | August effect shown by subteam C (P7, logbook entry 19/10/2026); holiday effect still to do (needs the holiday calendar from subteam A) |
+| F4.3 | In Progress | 🟢 Complete | Subteam C & A: Script `Task_F4_3C.py` executed by Anthony (`Anthoriv974`). Multi-year time-series (2020–2025) parsed to generate official holiday flags (`is_holiday`) and August low-occupancy flags (`is_august_low_use`). Dataset exported as `cedint_f1_hourly_F4.3C.csv` and code published on main repository `TBDA-Classes/2026G3`; logbook entry 25/10/2026. |
 | F5.2 | Not Started | 🟡 In Progress | Subteam C, notebook P8 (NW zone, 2021–22): light vs lighting, occupancy vs lighting and Plugs & Sockets, indoor temperature and humidity vs HVAC; other zones and correlation heatmaps per zone still to do |
 
 **All Sprint 1 items are complete.**
@@ -107,7 +107,7 @@ Items are grouped by feature (epic). The sprint is the release in which the stak
 |---|---|---|---|---|---|---|---|
 | **F4.1** | C | Building Manager | see average power by hour, weekday and month for each zone and load type, split into working days, weekends and August | I understand where and when energy is used | High | 1 | 🟢 Complete |
 | **F4.2** | C | Energy / Building Analyst | see 2020–23 compared with 2025, with 2020 flagged as a possible COVID-affected year | abnormal periods do not mislead the interpretation or bias the forecasts | Medium | 1 | 🟢 Complete |
-| **F4.3** | C + A | Building Manager | see how holidays and August change consumption | low-use days are expected and explained instead of looking like anomalies | Medium | 2 | 🟡 In Progress |
+| **F4.3** | C + A | Building Manager | see how holidays and August change consumption | low-use days are expected and explained instead of looking like anomalies | Medium | 2 | 🟢 Complete |
 
 ### F5. Explain what drives consumption
 
@@ -175,7 +175,7 @@ Subteams: A Data Engineering (3) · B Data Quality & Validation (3) · C Explora
 | Sprint | Increment | Delivered value and items | Status on 19 October 2026 |
 |---|---|---|---|
 | **Sprint 1 · 1–14 October** | Trusted data and first understanding | Clean hourly dataset with flags, quality evidence, profiles, occupancy test, energy-type decision, first baseline forecast (NW HVAC), documentation started.<br>Items: F1.1, F2.1, F4.1, F4.2, F5.1, F6.1, F6.2, F7.2, F9.1, F9.2, F9.3 | Closed. All 11 items complete. |
-| **Sprint 2 · 15–28 October** | Context and drivers | Spatial organisation, weather and holiday drivers, full relation matrix, holiday and August effects.<br>Items: F3.1, F4.3, F5.2, F5.3 | Running. F3.1, F4.3 and F5.2 in progress. |
+| **Sprint 2 · 15–28 October** | Context and drivers | Spatial organisation, weather and holiday drivers, full relation matrix, holiday and August effects.<br>Items: F3.1, F4.3, F5.2, F5.3 | Running. F3.1 and F5.2 in progress. F4.3 complete. |
 | **Sprint 3 · 29 October – 11 November** | Forecasts and explanations | Day-ahead forecasts for all priority series, unseen-data tests, SHAP, residuals, anomaly candidates, dashboard prototype.<br>Items: F1.2, F1.3, F2.2, F3.2, F3.3, F5.4, F6.3, F6.6, F7.1, F8.1 | F2.2 started early. |
 | **Sprint 4 · 12–25 November** | Evidence and story | ASHRAE 14 evaluation, model comparison, robustness, multi-period forecast, final deck, video or one-page summary.<br>Items: F1.4, F6.4, F6.5, F6.7, F8.2, F8.3 | Not started. |
 | **Post · 1–14 December** | Release | Feedback from the 30 November presentation processed; DataPack v1.0 in Moodle by 14 December.<br>Items: F9.4 | Not started. |
