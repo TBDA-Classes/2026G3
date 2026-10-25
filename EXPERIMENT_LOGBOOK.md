@@ -119,3 +119,18 @@ Besides, the structure of the template and any other aspect of this document can
 | **Interpretation** | • Higher luminosity is generally associated with lower lighting consumption.<br>• Occupancy must be analysed together with the hour of the day: the overall lighting result reverses once day and night are separated.<br>• Temperature has a non-linear relationship with HVAC energy, so it can still be a useful forecasting variable despite its weak linear correlation.<br>• Humidity adds little information because it varies very little.<br>• Candidate predictors (final considerations of P7 and P8): zone, load type, hour of day, weekday/weekend, month/season, August, year or period, luminosity, temperature and occupancy. |
 | **Issued found** | • The analysis covers only the NW zone in 2021–2022, so the results cannot automatically be generalised to the other zones or to 2025.<br>• Humidity and occupancy have sensor limitations; presence is also detected at night, so night-time occupancy readings should be interpreted with caution.<br>• `temp_c` is indoor temperature, which the HVAC system itself influences.<br>• Correlations do not show cause and effect; the variables must be tested for their real contribution to forecasting accuracy. |
 | **Extras** | • Subteam C (Exploration & Environment). Notebook: `TBDA_P8_Environmental_Exploration.ipynb`; conclusions in Team C final considerations (P7 and P8).<br>• Starts backlog item F5.2 (NW zone only) and supports F5.1 (presence follows the daily cycle). |
+
+
+### Entry 7 — 25/10/2026
+
+| Field | Content |
+|---|---|
+| **Date** | 25/10/2026 |
+| **Dataset version** | v0.4 (`cedint_f1_hourly_F4.3C.csv`, built from `cedint_f1_hourly.csv`) |
+| **Cleaning steps** | • Parsed full 2020–2025 multi-year time-series into local timestamp objects (`Europe/Madrid`).<br>• Identified official regional public holidays (e.g., Good Friday, Labour Day, Community of Madrid Day, Assumption of Mary) across all covered years (2020–2025) and generated the boolean flag `is_holiday`.<br>• Identified the annual August low-occupancy period corresponding to partial university/building closures and generated the boolean flag `is_august_low_use`.<br>• Exported the enriched hourly dataset containing all original electrical and environmental metrics augmented with the two calendar indicators. |
+| **Model tested** | N/A (Data Engineering & Feature Enrichment Step) |
+| **Parameters tested** | • Calendar rules matching regional official holiday schedules for Madrid (2020–2025).<br>• Calendar mask targeting August low-occupancy windows (01/08 to 31/08). |
+| **Results obtained** | • Successfully generated the enriched dataset `cedint_f1_hourly_F4.3C.csv`.<br>• Successfully flagged all official holiday hours (`is_holiday = 1`) and August low-use hours (`is_august_low_use = 1`) across the entire 2020–2025 time horizon without altering original physical readings. |
+| **Interpretation** | • Isolation of low-occupancy periods is critical for downstream Big Data forecasting algorithms to prevent artificial consumption drops from biasing baseline load profiles. |
+| **Issued found** | • Merge conflict encountered on `.gitignore` during `git pull --rebase` due to concurrent team updates; resolved manually by accepting remote state (`git checkout --ours .gitignore`) prior to pushing. |
+| **Extras** | • Task F4.3C executed by Anthony (`Anthoriv974`). Script: `Task_F4_3C.py`. Code committed and synchronized on main branch of team repository `TBDA-Classes/2026G3`. |
