@@ -39,13 +39,7 @@ for sheet_name, df_raw in dfs_raw.items():
     is_daytime = (df_processed["Hour"] >= 7) & (df_processed["Hour"] <= 19)
     df_processed.loc[is_daytime & (df_processed["Lum"] == 0), "Lum"] = np.nan
 
-  # D. Rule: Pres = 0 is "absent" only when Temp is present
-  if "Pres" in df_processed.columns and "Temp" in df_processed.columns:
-    temp_is_present = df_processed["Temp"].notna()
-    df_processed.loc[
-        (df_processed["Pres"] == 0) & temp_is_present, "Pres"
-    ] = np.nan
-
+ 
   # Store the cleaned dataframe
   dfs_processed[sheet_name] = df_processed
 
