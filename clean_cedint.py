@@ -1,5 +1,6 @@
 """
 CeDInt floor 1 - data cleaning pipeline (TBDA, Team B: Data Quality & Validation)
+Dataset version produced: v0.4 (v0.3 + calendar flags, current check, raw-sheet cache)
 
 Principle: NOTHING IS DELETED. Raw values are kept in *_raw columns, problems are
 marked with 0/1 flag columns, and only the *clean* columns set a value to NaN
@@ -308,10 +309,20 @@ def consistency(H):
         ci = g["current_a"].notna() & g["apparent_power_va"].notna()
         r_ci = g.loc[ci, "current_a"].corr(g.loc[ci, "apparent_power_va"]) if ci.sum() > 30 else np.nan
         r_pe = g.loc[both, "energy_wh"].corr(g.loc[both, "power_w"]) if both.sum() > 30 else np.nan
+        # current checks (grid 230 V, tolerance +-10 % as in EN 50160):
+        #  - implied voltage Pa / I must lie between 207 and 253 V
+        #  - active power can never exceed V x I  ->  W <= 253 V x I
+        cv = g["current_a"].gt(0.05) & g["apparent_power_va"].gt(5) & g["power_w"].notna()
+        v_imp = g.loc[cv, "apparent_power_va"] / g.loc[cv, "current_a"]
+        v_pass = v_imp.between(207, 253).mean() if cv.any() else np.nan
+        w_pass = (g.loc[cv, "power_w"] <= 253 * g.loc[cv, "current_a"]).mean() if cv.any() else np.nan
         rows.append(dict(zone=z, load_type=l, era=era, hours_checked=int(both.sum()),
                          power_vs_energy_pass=round(pe_pass, 3), power_vs_energy_r=round(r_pe, 3),
                          apparent_ge_active_pass=round(app_pass, 3), power_factor_0_1_pass=round(pf_pass, 3),
                          current_vs_apparent_r=round(r_ci, 3),
+                         implied_voltage_207_253_pass=round(v_pass, 3) if pd.notna(v_pass) else np.nan,
+                         active_le_V_times_I_pass=round(w_pass, 3) if pd.notna(w_pass) else np.nan,
+                         median_implied_voltage=round(v_imp.median(), 1) if cv.any() else np.nan,
                          median_power_factor=round(pf.median(), 2) if pf.notna().any() else np.nan))
     return pd.DataFrame(rows)
 
@@ -405,6 +416,10 @@ DICTIONARY = [
     ("flag_hum_invalid", "0/1", "Humidity outside 5-95 %: set to NaN."),
     ("flag_lum_day_zero", "0/1", "Lum = 0 between 10 and 16 h UTC (suspicious, kept; zeros at night are real darkness)."),
     ("series_excluded", "0/1", "Series not used at all (SE Projector: 100 % zeros)."),
+    ("is_holiday / holiday_name", "0/1, text", "Public holiday in Spain or the Comunidad de Madrid on the local date (python 'holidays', ES-MD). Municipal holidays and UPM closures not included."),
+    ("is_weekend", "0/1", "Local date is a Saturday or Sunday."),
+    ("is_august_low_use", "0/1", "Local month is August (low-use month at the university, backlog F4.3)."),
+    ("flag_covid_2020", "0/1", "Local year 2020: COVID-affected year (backlog F4.2). Test models with and without these hours."),
 ]
 
 HOURLY_COLS = ["timestamp_utc", "timestamp_local", "zone", "zone_code", "load_type", "n_devices", "era",
@@ -415,6 +430,7 @@ HOURLY_COLS = ["timestamp_utc", "timestamp_local", "zone", "zone_code", "load_ty
                "flag_energy_implausible", "flag_neg_noise", "flag_neg_large", "reversed_sign", "flag_low_coverage",
                "flag_power_spike", "flag_power_energy_mismatch", "flag_env_missing", "flag_temp_impossible",
                "flag_temp_extreme", "flag_hum_invalid", "flag_lum_day_zero", "series_excluded",
+               "is_holiday", "holiday_name", "is_weekend", "is_august_low_use", "flag_covid_2020",
                "n_zero_record", "n_partial", "n_reset", "n_spike", "n_neg_noise", "n_neg_large"]
 
 README = [
@@ -503,9 +519,40 @@ def write_outputs(H, qo, cons, ev, minute, out_dir):
     return path
 
 
+# ---------------------------------------------------------------- 6b. calendar flags (v0.4)
+def add_calendar_flags(H):
+    """Calendar context from local (Europe/Madrid) time.
+    is_holiday        national + Comunidad de Madrid public holidays (python 'holidays' package, ES / MD).
+                      Municipal holidays and UPM academic closures are NOT included.
+    is_weekend        Saturday or Sunday.
+    is_august_low_use local month = August (low-use month at the university).
+    flag_covid_2020   local year 2020 (COVID-affected year, see backlog F4.2)."""
+    import holidays
+    years = sorted(H["timestamp_local"].dt.year.unique())
+    hol = holidays.Spain(subdiv="MD", years=years)
+    d = H["timestamp_local"].dt.date
+    H["is_holiday"] = d.map(lambda x: int(x in hol))
+    H["holiday_name"] = d.map(lambda x: hol.get(x, ""))
+    H["is_weekend"] = (H["timestamp_local"].dt.dayofweek >= 5).astype(int)
+    H["is_august_low_use"] = (H["timestamp_local"].dt.month == 8).astype(int)
+    H["flag_covid_2020"] = (H["timestamp_local"].dt.year == 2020).astype(int)
+    return H
+
+
+def save_raw_cache(raw, out_dir):
+    """One pickle per raw sheet (untouched values) so make_figures.py can draw raw behaviour without
+    re-reading the Excel files."""
+    cdir = os.path.join(out_dir, "raw_cache")
+    os.makedirs(cdir, exist_ok=True)
+    for (zone, sheet), d in raw.items():
+        slug = sheet.replace(" ", "_").replace("&", "and").replace(".", "")
+        d.assign(zone=zone, sheet=sheet).to_pickle(os.path.join(cdir, f"{zone}_{slug}.pkl"))
+
+
 # ---------------------------------------------------------------- main
 if __name__ == "__main__":
     raw = load_raw(RAW_DIR)
+    save_raw_cache(raw, OUT_DIR)
     hourly, minute, ev, overview = [], [], [], []
     for (zone, sheet), d in raw.items():
         c = clean_series(zone, sheet, d)
@@ -524,6 +571,7 @@ if __name__ == "__main__":
         print(f"done {zone} {sheet}: {len(h)} hourly rows")
     H = pd.concat(hourly, ignore_index=True)
     H["timestamp_local"] = H["timestamp_utc"].dt.tz_localize("UTC").dt.tz_convert("Europe/Madrid").dt.tz_localize(None)
+    H = add_calendar_flags(H)
     cons = consistency(H)
     qo = quality_overview(H, cons)
     usable = qo.set_index(["zone", "load_type", "era"])["recommendation"]
