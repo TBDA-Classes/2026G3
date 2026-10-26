@@ -37,8 +37,8 @@ This is a product backlog: every item is a feature or value increment for a stak
 | F3.1 | In Progress | 🟢 Complete | Task executed by Riccardo (Subteams A & C): Dataset v0.3 organized as a unified long table structured by building, floor, zone code (1NE, 1NW, 1SE, 1SW) and load type; logbook entry 26/10/2026.
 | F4.3 | In Progress | 🟢 Complete | Subteam C & A: Script `Task_F4_3C.py` executed by Anthony (`Anthoriv974`). Multi-year time-series (2020–2025) parsed to generate official holiday flags (`is_holiday`) and August low-occupancy flags (`is_august_low_use`). Dataset exported as `cedint_f1_hourly_F4.3C.csv` and code published on main repository `TBDA-Classes/2026G3`; logbook entry 25/10/2026. |
 | F5.2 | Started | 🟢 Complete | Task executed by Maria Vittoria (Subteam C): Full relation matrix completed across all zones with correlation heatmaps linking indoor temperature, humidity, luminosity, and occupancy to each load type; logbook entry 26/10/2026. |
-| F3.2 | Started | 🟢 Complete | Task executed by Catherine (Subteams C & B): Zones compared across identical load types and normalized per device count to isolate spatial consumption anomalies; logbook entry 26/10/2026. |
-| F5.3 | Started | 🟢 Complete | Task executed by Catherine (Subteams C & A): Outdoor weather impact (temperature, degree-hours) and delayed HVAC response time lags (0–6 h) evaluated and integrated into the feature pipeline; logbook entry 26/10/2026. |
+| F3.2 | Started | 🟢 Complete | Task executed by Catherine (Subteams B): Zones compared across identical load types and normalized per device count to isolate spatial consumption anomalies; logbook entry 26/10/2026. |
+| F5.3 | Started | 🟢 Complete | Task executed by Catherine (Subteams B): Outdoor weather impact (temperature, degree-hours) and delayed HVAC response time lags (0–6 h) evaluated and integrated into the feature pipeline; logbook entry 26/10/2026. |
 
 **All Sprint 1 items are complete.**
 
