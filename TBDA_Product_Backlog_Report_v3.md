@@ -8,9 +8,9 @@ This is a product backlog: every item is a feature or value increment for a stak
 
 | | |
 |---|---|
-| **Status on** | **25 October 2026** (Sprint 2 in progress) |
+| **Status on** | **26 October 2026** (Sprint 2 in progress) |
 | **Items** | 32 · 20 High, 11 Medium, 1 Low |
-| **Progress** | 🟢 12 Complete · 🟡 3 In Progress · 🔵 17 Not Started · 🟠 0 Overdue · ⚪ 0 On Hold |
+| **Progress** | 🟢 16 Complete · 🟡 1 In Progress · 🔵 15 Not Started · 🟠 0 Overdue · ⚪ 0 On Hold |
 | **Sprints** | 1 = 1–14 October · 2 = 15–28 October · 3 = 29 October – 11 November · 4 = 12–25 November · Post = 1–14 December |
 
 **Status:** 🔵 Not Started · 🟡 In Progress · 🟢 Complete · 🟠 Overdue · ⚪ On Hold  
@@ -34,9 +34,11 @@ This is a product backlog: every item is a feature or value increment for a stak
 | F9.2 | In Progress | 🟢 Complete | Team B, sheet *Data_dictionary* (38 entries), also in each `Storey1_<zone>_cleaned_hourly.xlsx` |
 | F9.3 | In Progress | 🟢 Complete | Experiment Logbook with six entries in chronological order – 05/10 (subteam A pipeline), 08/10 (v0.1 pilot), 17/10 (v0.3 dataset), 17/10 (baselines), 19/10 (consumption profiles) and 19/10/2026 (environment and occupancy) – and the CRISP-DM report for Sprint 1; both are updated every sprint |
 | F2.2 | Not Started | 🟡 In Progress | Team B rated every secondary series (Use / Use with caution / Do not use); characterisation and forecasts by subteam D still to do |
-| F3.1 | Not Started | 🟡 In Progress | Dataset v0.3 is one long table keyed by timestamp, zone, zone code (1NE…1SW) and load type; forecasts still to come |
+| F3.1 | In Progress | 🟢 Complete | Task executed by Riccardo (Subteams A & C): Dataset v0.3 organized as a unified long table structured by building, floor, zone code (1NE, 1NW, 1SE, 1SW) and load type; logbook entry 26/10/2026.
 | F4.3 | In Progress | 🟢 Complete | Subteam C & A: Script `Task_F4_3C.py` executed by Anthony (`Anthoriv974`). Multi-year time-series (2020–2025) parsed to generate official holiday flags (`is_holiday`) and August low-occupancy flags (`is_august_low_use`). Dataset exported as `cedint_f1_hourly_F4.3C.csv` and code published on main repository `TBDA-Classes/2026G3`; logbook entry 25/10/2026. |
-| F5.2 | Not Started | 🟡 In Progress | Subteam C, notebook P8 (NW zone, 2021–22): light vs lighting, occupancy vs lighting and Plugs & Sockets, indoor temperature and humidity vs HVAC; other zones and correlation heatmaps per zone still to do |
+| F5.2 | Started | 🟢 Complete | Task executed by Maria Vittoria (Subteam C): Full relation matrix completed across all zones with correlation heatmaps linking indoor temperature, humidity, luminosity, and occupancy to each load type; logbook entry 26/10/2026. |
+| F3.2 | Started | 🟢 Complete | Task executed by Catherine (Subteams C & B): Zones compared across identical load types and normalized per device count to isolate spatial consumption anomalies; logbook entry 26/10/2026. |
+| F5.3 | Started | 🟢 Complete | Task executed by Catherine (Subteams C & A): Outdoor weather impact (temperature, degree-hours) and delayed HVAC response time lags (0–6 h) evaluated and integrated into the feature pipeline; logbook entry 26/10/2026. |
 
 **All Sprint 1 items are complete.**
 
@@ -97,8 +99,8 @@ Items are grouped by feature (epic). The sprint is the release in which the stak
 
 | ID | Team | As a … | I want to … | So that … | Priority | Sprint | Status |
 |---|---|---|---|---|---|---|---|
-| **F3.1** | A + C | Energy / Building Analyst | see every consumption series and forecast organised by building, floor and zone (NE, NW, SE, SW) and load type | I understand where energy is used and can aggregate by space, not only by device | High | 2 | 🟡 In Progress |
-| **F3.2** | C + B | Facilities Technician | compare zones for the same load type, normalised per device | I can spot a zone that consumes unusually more than its neighbours | Medium | 3 | 🔵 Not Started |
+| **F3.1** | A + C | Energy / Building Analyst | see every consumption series and forecast organised by building, floor and zone (NE, NW, SE, SW) and load type | I understand where energy is used and can aggregate by space, not only by device | High | 2 | 🟢 Complete |
+| **F3.2** | C + B | Facilities Technician | compare zones for the same load type, normalised per device | I can spot a zone that consumes unusually more than its neighbours | Medium | 3 | 🟢 Complete |
 | **F3.3** | D + C | Energy / Building Analyst | get a forecast for zone NE, which has no environmental sensors, with the limits of that forecast stated | I know what can and cannot be predicted without local sensors | Medium | 3 | 🔵 Not Started |
 
 ### F4. Understand past consumption
@@ -114,8 +116,8 @@ Items are grouped by feature (epic). The sprint is the release in which the stak
 | ID | Team | As a … | I want to … | So that … | Priority | Sprint | Status |
 |---|---|---|---|---|---|---|---|
 | **F5.1** | C | Energy / Building Analyst | know whether the sensor value "Pres" represents occupancy | occupancy can be used as a driver with confidence | High | 1 | 🟢 Complete |
-| **F5.2** | C | Energy / Building Analyst | see how indoor temperature, humidity, light and occupancy relate to each load type (relation matrix with correlation heatmaps per zone) | I know which conditions drive each type of energy | High | 2 | 🟡 In Progress |
-| **F5.3** | C + A | Energy / Building Analyst | see the effect of outdoor weather (temperature, degree-hours) and of delayed responses (0–6 h) on HVAC | HVAC consumption can be anticipated from the weather forecast | High | 2 | 🔵 Not Started |
+| **F5.2** | C | Energy / Building Analyst | see how indoor temperature, humidity, light and occupancy relate to each load type (relation matrix with correlation heatmaps per zone) | I know which conditions drive each type of energy | High | 2 | 🟢 Complete |
+| **F5.3** | C + A | Energy / Building Analyst | see the effect of outdoor weather (temperature, degree-hours) and of delayed responses (0–6 h) on HVAC | HVAC consumption can be anticipated from the weather forecast | High | 2 | 🟢 Complete |
 | **F5.4** | C + D | Building Manager | see which drivers matter most for each forecast (SHAP explanations per load type) | I can trust the forecast and act on the consumption drivers | High | 3 | 🔵 Not Started |
 
 ### F6. Trust: data reliability and forecast evidence
@@ -175,7 +177,7 @@ Subteams: A Data Engineering (3) · B Data Quality & Validation (3) · C Explora
 | Sprint | Increment | Delivered value and items | Status on 19 October 2026 |
 |---|---|---|---|
 | **Sprint 1 · 1–14 October** | Trusted data and first understanding | Clean hourly dataset with flags, quality evidence, profiles, occupancy test, energy-type decision, first baseline forecast (NW HVAC), documentation started.<br>Items: F1.1, F2.1, F4.1, F4.2, F5.1, F6.1, F6.2, F7.2, F9.1, F9.2, F9.3 | Closed. All 11 items complete. |
-| **Sprint 2 · 15–28 October** | Context and drivers | Spatial organisation, weather and holiday drivers, full relation matrix, holiday and August effects.<br>Items: F3.1, F4.3, F5.2, F5.3 | Running. F3.1 and F5.2 in progress. F4.3 complete. |
+| **Sprint 2 · 15–28 October** | Context and drivers | Spatial organisation, weather and holiday drivers, full relation matrix, holiday and August effects.<br>Items: F3.1, F4.3, F5.2, F5.3 | Running. F3.1, F3.2, F4.3, F5.2, and F5.3 complete. F2.2 partially completed by Team B. |
 | **Sprint 3 · 29 October – 11 November** | Forecasts and explanations | Day-ahead forecasts for all priority series, unseen-data tests, SHAP, residuals, anomaly candidates, dashboard prototype.<br>Items: F1.2, F1.3, F2.2, F3.2, F3.3, F5.4, F6.3, F6.6, F7.1, F8.1 | F2.2 started early. |
 | **Sprint 4 · 12–25 November** | Evidence and story | ASHRAE 14 evaluation, model comparison, robustness, multi-period forecast, final deck, video or one-page summary.<br>Items: F1.4, F6.4, F6.5, F6.7, F8.2, F8.3 | Not started. |
 | **Post · 1–14 December** | Release | Feedback from the 30 November presentation processed; DataPack v1.0 in Moodle by 14 December.<br>Items: F9.4 | Not started. |
