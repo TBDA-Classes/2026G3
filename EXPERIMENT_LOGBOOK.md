@@ -134,3 +134,65 @@ Besides, the structure of the template and any other aspect of this document can
 | **Interpretation** | • Isolation of low-occupancy periods is critical for downstream Big Data forecasting algorithms to prevent artificial consumption drops from biasing baseline load profiles. |
 | **Issued found** | • Merge conflict encountered on `.gitignore` during `git pull --rebase` due to concurrent team updates; resolved manually by accepting remote state (`git checkout --ours .gitignore`) prior to pushing. |
 | **Extras** | • Task F4.3C executed by Anthony (`Anthoriv974`). Script: `Task_F4_3C.py`. Code committed and synchronized on main branch of team repository `TBDA-Classes/2026G3`. |
+
+### Entry 8 — 26/10/2026
+
+| Field | Content |
+|---|---|
+| **Date** | 26/10/2026 |
+| **Dataset version** | v0.3 (`cedint_f1_hourly_clean.csv.gz`) |
+| **Cleaning steps** | • Structured dataset into a unified long table keyed by timestamp, building, floor, zone code (`1NE`, `1NW`, `1SE`, `1SW`), and load type.<br>• Stored zone-level environmental sensor data (`temp_c`, `hum_pct`, `lum_lux`, `occupancy`) aligned per zone. |
+| **Model tested** | N/A (Spatial Context & Data Structuring Step) |
+| **Parameters tested** | • Spatial categorization rules across all Floor 1 sensor series.<br>• Schema mapping linking device-level meters to corresponding zone centroids. |
+| **Results obtained** | • Achieved complete spatial organization across all 18 series on Floor 1.<br>• Enabled seamless aggregation by zone and load type (Tasks F3.1 requirements fulfilled). |
+| **Interpretation** | • Structuring data by zone and load type allows direct spatial comparison and forms the structural backbone for multi-zone forecasting models. |
+| **Issued found** | • Zone `1NE` lacks local environmental sensors, requiring feature proxying or external weather data for future forecasting steps. |
+| **Extras** | • Task executed by Riccardo (Subteams A & C). Covers backlog item **F3.1**. |
+
+---
+
+### Entry 9 — 26/10/2026
+
+| Field | Content |
+|---|---|
+| **Date** | 26/10/2026 |
+| **Dataset version** | v0.3 (`cedint_f1_hourly_clean.csv.gz`) |
+| **Cleaning steps** | • Normalized electrical energy consumption per device count across all Floor 1 zones.<br>• Filtered out uncalibrated zero readings during non-operational hours. |
+| **Model tested** | N/A (Inter-Zone Comparative Analysis Step) |
+| **Parameters tested** | • Normalization factors based on installed device counts per zone.<br>• Cross-zone consumption ratio comparisons for identical load types (HVAC, Lighting, Plugs & Sockets). |
+| **Results obtained** | • Identified baseline intensity differences between zones (e.g., NW exhibiting significantly higher base load for Plugs & Sockets compared to NE, SE, and SW).<br>• Isolated spatial consumption anomalies for facility management review (Tasks F3.2 requirements fulfilled). |
+| **Interpretation** | • Device-normalized comparison prevents misinterpreting larger physical zones as energy-inefficient and highlights true operational outliers. |
+| **Issued found** | • SE Projector series remains 100% zero, excluding it from comparative normalization. |
+| **Extras** | • Task executed by Catherine (Subteams C & B). Covers backlog item **F3.2**. |
+
+---
+
+### Entry 10 — 26/10/2026
+
+| Field | Content |
+|---|---|
+| **Date** | 26/10/2026 |
+| **Dataset version** | v0.3 (`cedint_f1_hourly_clean.csv.gz`) |
+| **Cleaning steps** | • Paired hourly electrical loads with indoor environmental metrics (`temp_c`, `hum_pct`, `lum_lux`, `occupancy`).<br>• Applied non-linear transformations and binning on indoor temperature (2 °C intervals). |
+| **Model tested** | N/A (Full Relation Matrix & Driver Analysis) |
+| **Parameters tested** | • Pearson and Spearman correlation matrices across all 4 zones.<br>• Pairwise feature correlation heatmaps per load type and zone. |
+| **Results obtained** | • Generated complete relation matrix and correlation heatmaps for all zones.<br>• Confirmed non-linear relationship between indoor temperature and HVAC energy, and verified negative correlation between daylight luminosity and artificial lighting (Tasks F5.2 requirements fulfilled). |
+| **Interpretation** | • Environmental drivers act non-linearly on energy targets. Correlation heatmaps validate indoor temperature, luminosity, and occupancy as essential exogenous features for predictive models. |
+| **Issued found** | • Indoor humidity exhibits near-zero variance across extended periods, providing minimal explanatory power for forecasting. |
+| **Extras** | • Task executed by Maria Vittoria (Subteam C). Notebook: `TBDA_P8_Environmental_Exploration.ipynb`. Covers backlog item **F5.2**. |
+
+---
+
+### Entry 11 — 26/10/2026
+
+| Field | Content |
+|---|---|
+| **Date** | 26/10/2026 |
+| **Dataset version** | v0.3 merged with Open-Meteo external weather dataset |
+| **Cleaning steps** | • Merged outdoor temperature and calculated heating/cooling degree-hours from Open-Meteo API.<br>• Created lagged environmental features for HVAC response time (lags $t-1$ to $t-6$ hours). |
+| **Model tested** | N/A (Weather & Lag Driver Feature Engineering) |
+| **Parameters tested** | • Time-lag range: 0 to 6 hours.<br>• Outdoor temperature and cooling degree-hour thresholds. |
+| **Results obtained** | • Quantified thermal inertia of the building: HVAC demand correlates strongly with 1–3 hour lagged outdoor temperature readings.<br>• Successfully integrated outdoor weather features into the data pipeline (Tasks F5.3 requirements fulfilled). |
+| **Interpretation** | • Building thermal mass introduces a delayed response to external weather changes. Including 1–3 hour lags improves short-term HVAC predictability. |
+| **Issued found** | • Alignment between UTC weather timestamps and local Madrid timestamps required explicit time zone conversions to avoid phase shifts in lag calculations. |
+| **Extras** | • Task executed by Catherine (Subteams C & A). Covers backlog item **F5.3**. |
