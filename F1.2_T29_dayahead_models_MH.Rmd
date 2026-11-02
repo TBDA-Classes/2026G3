@@ -39,7 +39,7 @@ invisible(lapply(pkgs, library, character.only = TRUE))
 
 ```{r config}
 CFG <- list(
-  data_file    = "cedint_f1_hourly_clean.csv",
+  data_file    = "cedint_f1_model_ready.csv",
   weather_file = "openmeteo_madrid_hourly.csv",   
   log_file     = "experiment_log.xlsx",
   out_dir      = "outputs_T29",
