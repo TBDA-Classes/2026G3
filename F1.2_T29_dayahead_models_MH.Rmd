@@ -1,0 +1,555 @@
+---
+title: "T29 (F1.2) – Day-ahead models: SARIMAX and LightGBM"
+subtitle: "DataPack Energy Forecaster – CeDInt floor 1 (TBDA) · Sprint 3"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.width = 10, fig.height = 4)
+```
+
+# 1. What this document does
+
+**Task T29 (F1.2):** train and tune day-ahead (24 h) models for HVAC, Lighting and Plugs & Sockets in every zone where the load exists, and log every run in the experiment log.
+
+| Item | Decision |
+|---|---|
+| Target | `energy_wh_model` (hourly active energy, Wh) from `cedint_f1_hourly_clean.csv` (dataset v0.4). It is already empty where the series is not usable. |
+| Series | zone × load type for HVAC, Lighting, Plugs & Sockets (found from the data) |
+| Models | Seasonal naive (baseline, t-168 h) · SARIMAX (ARIMA errors + Fourier terms + exogenous drivers) · LightGBM |
+| Tuning | LightGBM: random search with an expanding-window **TimeSeriesSplit** (sklearn-style) inside the training period. SARIMAX: small grid on the validation period. |
+| Split (T32) | Train 2020-06 → 2022-06 · Validate 2022-H2 · Test 2023 and 2025 |
+| Day-ahead rule | Forecast issued at 00:00 UTC for the 24 h of that day. Every target-derived feature uses lags ≥ 24 h, so nothing from the forecast day leaks in. |
+| Output | Predictions file, ASHRAE 14 metrics table, best parameters, feature importance and new rows in `experiment_log.xlsx` |
+
+# 2. Packages and configuration
+
+```{r packages}
+pkgs <- c("data.table", "lubridate", "zoo", "forecast", "lightgbm",
+          "openxlsx", "jsonlite", "ggplot2", "knitr")
+missing_pkgs <- setdiff(pkgs, rownames(installed.packages()))
+if (length(missing_pkgs)) stop("Install first: install.packages(c(",
+                               paste0("'", missing_pkgs, "'", collapse = ", "), "))")
+invisible(lapply(pkgs, library, character.only = TRUE))
+```
+
+```{r config}
+CFG <- list(
+  data_file    = "cedint_f1_hourly_clean.csv",
+  weather_file = "openmeteo_madrid_hourly.csv",   
+  log_file     = "experiment_log.xlsx",
+  out_dir      = "outputs_T29",
+  only_series  = NULL,                    
+  tz_local     = "Europe/Madrid",
+  lat = 40.4168, lon = -3.7038,
+  seed = 42,
+  quick_mode = FALSE,                      # TRUE = smoke test (few configs, few days)
+  n_splits = 5,                            # TimeSeriesSplit folds
+  cv_test_days = 28,                       # days in each CV test fold
+  n_random_configs = 25,                   # LightGBM random-search size
+  sarimax_valid_every_n_days = 3,          # SARIMAX grid is scored on every n-th validation day
+  window_days = 14,                        # history window used to update SARIMAX state each day
+  min_window_coverage = 0.5,               # skip a forecast day if the window has < 50 % of hours
+  plot_weeks = c(valid = "2022-10-03", test_2025 = "2025-09-15")
+)
+
+# Right-hand side = column name in the clean dataset; left-hand side = internal name.
+COLS <- list(
+  timestamp = "timestamp_utc", zone = "zone_code", load_type = "load_type",
+  y = "energy_wh_model",
+  temp_in = "temp_c", hum_in = "hum_pct", lum_in = "lum_lux", occupancy = "occupancy",
+  is_holiday = "is_holiday", is_august = "is_august_low_use", covid = "flag_covid_2020"
+)
+
+# Split defined in T32 (UTC dates)
+SPLITS <- list(
+  train     = c("2020-06-01", "2022-06-30"),
+  valid     = c("2022-07-01", "2022-12-31"),
+  test_2023 = c("2023-01-01", "2023-12-31"),
+  test_2025 = c("2025-01-01", "2025-12-31")
+)
+EVAL_SPLITS <- c("valid", "test_2023", "test_2025")
+
+if (CFG$quick_mode) {
+  CFG$n_splits <- 3; CFG$n_random_configs <- 6
+  CFG$sarimax_valid_every_n_days <- 10
+}
+dir.create(CFG$out_dir, showWarnings = FALSE, recursive = TRUE)
+set.seed(CFG$seed)
+```
+
+# 3. Metrics and helpers
+
+```{r helpers}
+# ASHRAE Guideline 14, hourly: CV(RMSE) <= 30 %, |NMBE| <= 10 %.
+# NMBE = sum(actual - predicted) / (n * mean(actual)). Align the sign/convention with
+# the metric function in models.ipynb (T19) if the team uses the opposite one.
+metrics <- function(actual, pred) {
+  ok <- is.finite(actual) & is.finite(pred)
+  a <- actual[ok]; p <- pred[ok]; n <- length(a)
+  if (n < 24) return(data.table(n = n, MAE = NA_real_, RMSE = NA_real_, CV_RMSE = NA_real_,
+                                NMBE = NA_real_, ASHRAE_pass = NA))
+  m <- mean(a); rmse <- sqrt(mean((a - p)^2))
+  data.table(n = n, MAE = mean(abs(a - p)), RMSE = rmse,
+             CV_RMSE = 100 * rmse / m, NMBE = 100 * sum(a - p) / (n * m),
+             ASHRAE_pass = (100 * rmse / m <= 30) & (abs(100 * sum(a - p) / (n * m)) <= 10))
+}
+
+# Robust UTC timestamp parser (fread may already return POSIXct; midnight text can lack "00:00:00")
+as_utc <- function(x) {
+  if (inherits(x, "POSIXct")) return(lubridate::force_tz(x, "UTC"))
+  lubridate::ymd_hms(as.character(x), tz = "UTC", truncated = 3)
+}
+
+to01 <- function(x) as.integer(tolower(as.character(x)) %in% c("1", "true", "t"))
+mx   <- function(x) if (all(is.na(x))) NA_integer_ else as.integer(max(x, na.rm = TRUE))
+
+fill_na <- function(v) {
+  if (all(is.na(v))) return(v)
+  v <- zoo::na.approx(v, na.rm = FALSE)
+  v <- zoo::na.locf(v, na.rm = FALSE)
+  zoo::na.locf(v, fromLast = TRUE, na.rm = FALSE)
+}
+
+classify_load <- function(x) {
+  x <- tolower(x)
+  fifelse(grepl("emerg|hand|dryer|rack|projector", x), "Secondary",
+  fifelse(grepl("hvac", x), "HVAC",
+  fifelse(grepl("plug|socket", x), "Plugs",
+  fifelse(grepl("light", x), "Lighting", "Other"))))
+}
+
+# sklearn-style TimeSeriesSplit on calendar days: expanding train window, test folds at the end
+ts_splits <- function(day_vec, n_splits, test_days) {
+  days <- sort(unique(day_vec)); nd <- length(days)
+  if (nd < n_splits * test_days + 100) stop("Not enough training days for the requested CV folds")
+  lapply(seq_len(n_splits), function(i) {
+    te_end <- nd - (n_splits - i) * test_days
+    te_start <- te_end - test_days + 1
+    list(train = days[seq_len(te_start - 1)], test = days[te_start:te_end])
+  })
+}
+```
+
+# 4. Data and weather
+
+```{r data}
+if (!file.exists(CFG$data_file))
+  stop("Cannot find ", CFG$data_file, " in ", getwd(),
+       ". Put the CSV next to this .Rmd or set the full path in CFG$data_file.")
+hdr <- names(fread(CFG$data_file, nrows = 0))
+miss <- setdiff(unname(unlist(COLS)), hdr)
+if (length(miss)) stop("Columns not found in the dataset: ", paste(miss, collapse = ", "),
+                       ". Edit COLS in the config chunk.")
+dt <- fread(CFG$data_file, select = unname(unlist(COLS)))   # reads only the columns we need
+setnames(dt, unname(unlist(COLS)), names(COLS))
+dt[, timestamp := as_utc(timestamp)]
+if (anyNA(dt$timestamp)) stop("Some timestamps could not be parsed")
+
+dt[, load_group := classify_load(load_type)]
+dt <- dt[load_group %in% c("HVAC", "Lighting", "Plugs")]
+if (anyDuplicated(dt, by = c("timestamp", "zone", "load_group")))
+  stop("More than one row per timestamp × zone × load type: aggregate the devices first.")
+
+for (v in c("is_holiday", "is_august", "covid")) set(dt, j = v, value = to01(dt[[v]]))
+dt[, date_local := as.Date(lubridate::with_tz(timestamp, CFG$tz_local), tz = CFG$tz_local)]
+
+# Date-level calendar lookup (so that rows created to fill gaps keep correct flags)
+cal <- dt[, .(is_holiday = mx(is_holiday), is_august = mx(is_august), covid = mx(covid)),
+          by = date_local]
+
+kable(dt[, .(hours = .N, first = min(timestamp), last = max(timestamp)),
+         by = .(zone, load_group)][order(load_group, zone)],
+      caption = "Series found (HVAC / Lighting / Plugs & Sockets)")
+```
+
+```{r weather}
+get_weather <- function() {
+  if (!file.exists(CFG$weather_file)) {
+    end <- min(as.Date(max(dt$timestamp)), Sys.Date() - 7)
+    url <- sprintf(paste0("https://archive-api.open-meteo.com/v1/archive?latitude=%s&longitude=%s",
+                          "&start_date=2020-01-01&end_date=%s",
+                          "&hourly=temperature_2m,relative_humidity_2m,shortwave_radiation,wind_speed_10m",
+                          "&timezone=GMT"), CFG$lat, CFG$lon, end)
+    j <- tryCatch(jsonlite::fromJSON(url), error = function(e) NULL)
+    if (is.null(j)) {
+      warning("Open-Meteo download failed. Using a proxy built from the indoor sensors; ",
+              "results will NOT use real outdoor weather. Save the Open-Meteo hourly file from T26 as ",
+              CFG$weather_file, " (columns: timestamp, w_temp, w_hum, w_rad, w_wind) and re-run.")
+      WEATHER_SOURCE <<- "indoor-sensor proxy (NOT real outdoor weather)"
+      w <- dt[, .(w_temp = mean(temp_in, na.rm = TRUE), w_hum = mean(hum_in, na.rm = TRUE),
+                  w_rad = mean(lum_in, na.rm = TRUE), w_wind = NA_real_), by = timestamp]
+      for (v in c("w_temp", "w_hum", "w_rad")) w[is.nan(get(v)), (v) := NA_real_]
+      return(w[order(timestamp)])
+    }
+    w <- data.table(timestamp = lubridate::ymd_hm(j$hourly$time, tz = "UTC"),
+                    w_temp = j$hourly$temperature_2m, w_hum = j$hourly$relative_humidity_2m,
+                    w_rad = j$hourly$shortwave_radiation, w_wind = j$hourly$wind_speed_10m)
+    fwrite(w, CFG$weather_file)
+  }
+  WEATHER_SOURCE <<- "Open-Meteo observed weather"
+  w <- fread(CFG$weather_file)
+  need <- c("timestamp", "w_temp", "w_hum", "w_rad", "w_wind")
+  if (length(setdiff(need, names(w)))) stop("Weather file must contain: ", paste(need, collapse = ", "))
+  w[, timestamp := as_utc(timestamp)]
+  w[, ..need]
+}
+WEATHER_SOURCE <- NA_character_
+weather <- get_weather()
+cat("Weather source:", WEATHER_SOURCE, "\n")
+```
+
+# 5. Feature table (day-ahead safe)
+
+Target-derived features use lags ≥ 24 h, so a forecast issued at 00:00 for hour *t* only uses information up to *t − 24 h*. The full hourly grid is rebuilt per series, so lags across the 902-day gap are correctly missing.
+
+```{r features}
+build_features <- function(s_raw) {
+  s_raw <- copy(s_raw)[, .(timestamp, y, temp_in, hum_in, lum_in, occupancy)]
+  grid <- data.table(timestamp = seq(min(s_raw$timestamp), max(s_raw$timestamp), by = "hour"))
+  s <- merge(grid, s_raw, by = "timestamp", all.x = TRUE)
+  s <- merge(s, weather, by = "timestamp", all.x = TRUE)
+  setorder(s, timestamp)
+  for (v in c("w_temp", "w_hum", "w_rad", "w_wind")) set(s, j = v, value = fill_na(s[[v]]))
+
+  # --- calendar (local time: occupancy follows Madrid time) ---
+  loc <- lubridate::with_tz(s$timestamp, CFG$tz_local)
+  s[, `:=`(hod = lubridate::hour(loc), dow = lubridate::wday(loc, week_start = 1) - 1L,
+           month = lubridate::month(loc), doy = lubridate::yday(loc),
+           date_local = as.Date(loc, tz = CFG$tz_local),
+           date_utc = as.Date(timestamp, tz = "UTC"))]
+  s <- merge(s, cal, by = "date_local", all.x = TRUE, sort = FALSE)
+  setorder(s, timestamp)
+  s[is.na(is_holiday), is_holiday := 0L]
+  s[is.na(is_august),  is_august := as.integer(month == 8)]
+  s[is.na(covid),      covid := 0L]
+  hol_days <- cal[is_holiday == 1, date_local]
+  s[, `:=`(is_weekend = as.integer(dow >= 5),
+           hol_prev = as.integer((date_local - 1) %in% hol_days),
+           hol_next = as.integer((date_local + 1) %in% hol_days),
+           hod_sin = sin(2 * pi * hod / 24), hod_cos = cos(2 * pi * hod / 24),
+           doy_sin = sin(2 * pi * doy / 365.25), doy_cos = cos(2 * pi * doy / 365.25))]
+
+  # --- outdoor weather (observed weather used as a proxy for a forecast) ---
+  s[, `:=`(hdd18 = pmax(18 - w_temp, 0), cdd24 = pmax(w_temp - 24, 0),
+           w_temp_roll24 = frollmean(w_temp, 24, align = "right"))]
+  for (k in 1:6) s[, (paste0("w_temp_l", k)) := shift(w_temp, k)]   # lags 0-6 h (T26); lag 0 = w_temp
+
+  # --- target lags and rolling stats, all shifted >= 24 h ---
+  for (k in c(24, 48, 72, 168, 336)) s[, (paste0("lag_", k)) := shift(y, k)]
+  y24 <- shift(s$y, 24)
+  s[, `:=`(roll_mean_24  = frollmean(y24, 24,  na.rm = TRUE, align = "right"),
+           roll_mean_168 = frollmean(y24, 168, na.rm = TRUE, align = "right"))]
+  m2 <- frollmean(y24^2, 24, na.rm = TRUE, align = "right")
+  s[, roll_sd_24 := sqrt(pmax(m2 - roll_mean_24^2, 0))]
+  s[, same_hour_mean_7d := rowMeans(sapply(1:7, function(k) shift(y, 24 * k)), na.rm = TRUE)]
+
+  # --- indoor drivers: only as lags >= 24 h (not known ahead of time) ---
+  for (v in c("temp_in", "hum_in", "lum_in", "occupancy")) {
+    s[, (paste0(v, "_l24"))  := shift(get(v), 24)]
+    s[, (paste0(v, "_l168")) := shift(get(v), 168)]
+  }
+
+  # --- split label (UTC dates) ---
+  s[, split := NA_character_]
+  for (nm in names(SPLITS)) {
+    r <- as.Date(SPLITS[[nm]])
+    s[date_utc >= r[1] & date_utc <= r[2], split := nm]
+  }
+  s[, pred_snaive := lag_168]
+
+  feats <- c("hod", "dow", "month", "is_weekend", "is_holiday", "hol_prev", "hol_next",
+             "is_august", "covid", "hod_sin", "hod_cos", "doy_sin", "doy_cos",
+             "w_temp", "w_hum", "w_rad", "w_wind", "hdd18", "cdd24", "w_temp_roll24",
+             paste0("w_temp_l", 1:6),
+             paste0("lag_", c(24, 48, 72, 168, 336)),
+             "roll_mean_24", "roll_mean_168", "roll_sd_24", "same_hour_mean_7d",
+             paste0(rep(c("temp_in", "hum_in", "lum_in", "occupancy"), each = 2), c("_l24", "_l168")))
+  # drop features without any value in training (e.g. NE has no indoor environmental sensors)
+  tr <- s[split == "train"]
+  feats <- feats[vapply(feats, function(f) any(!is.na(tr[[f]])), logical(1))]
+  list(s = s, feats = feats)
+}
+```
+
+# 6. LightGBM with TimeSeriesSplit
+
+```{r lgb}
+LGB_BASE <- list(objective = "regression", metric = "rmse", bagging_freq = 1,
+                 early_stopping_round = 50, verbosity = -1, seed = CFG$seed,
+                 num_threads = max(1, parallel::detectCores() - 1))
+
+best_of <- function(m) {
+  e <- unlist(m$record_evals$valid$rmse$eval)
+  list(iter = which.min(e), rmse = min(e))
+}
+
+tune_lgb <- function(tr, feats) {
+  folds <- ts_splits(tr$date_utc, CFG$n_splits, CFG$cv_test_days)
+  n <- CFG$n_random_configs
+  grid <- unique(data.table(
+    num_leaves       = sample(c(15, 31, 63, 127), n, TRUE),
+    learning_rate    = sample(c(0.02, 0.05, 0.1), n, TRUE),
+    min_data_in_leaf = sample(c(20, 50, 100, 200), n, TRUE),
+    feature_fraction = sample(c(0.6, 0.8, 1), n, TRUE),
+    bagging_fraction = sample(c(0.7, 0.9, 1), n, TRUE),
+    lambda_l2        = sample(c(0, 1, 10, 50), n, TRUE)))
+  scores <- rbindlist(lapply(seq_len(nrow(grid)), function(i) {
+    p <- c(LGB_BASE, as.list(grid[i]))
+    fr <- lapply(folds, function(f) {
+      itr <- tr$date_utc %in% f$train; ite <- tr$date_utc %in% f$test
+      dtr <- lgb.Dataset(as.matrix(tr[itr, ..feats]), label = tr$y[itr])
+      dva <- lgb.Dataset.create.valid(dtr, as.matrix(tr[ite, ..feats]), label = tr$y[ite])
+      m <- lgb.train(params = p, data = dtr, nrounds = 1000,
+                     valids = list(valid = dva), verbose = -1)
+      b <- best_of(m)
+      list(cv = 100 * b$rmse / mean(tr$y[ite]), iter = b$iter)
+    })
+    data.table(cv_rmse = mean(sapply(fr, `[[`, "cv")),
+               iter = round(mean(sapply(fr, `[[`, "iter"))))
+  }))
+  grid <- cbind(grid, scores)[order(cv_rmse)]
+  best <- grid[1]
+  list(params = c(LGB_BASE, as.list(best[, 1:6])),
+       nrounds = max(50, round(best$iter * 1.1)),   # a bit more data in the final fit
+       cv = best$cv_rmse, grid = grid)
+}
+
+fit_lgb <- function(tr, feats, params, nrounds) {
+  params$early_stopping_round <- NULL
+  lgb.train(params = params, data = lgb.Dataset(as.matrix(tr[, ..feats]), label = tr$y),
+            nrounds = nrounds, verbose = -1)
+}
+```
+
+# 7. SARIMAX (ARIMA errors + Fourier terms + exogenous drivers)
+
+Daily and weekly seasonality is handled with Fourier terms (a period of 168 h is too heavy for a seasonal ARIMA). Exogenous drivers: outdoor temperature, degree-hours, holidays, weekend, August, COVID flag. The coefficients are fitted once on the training period. For each forecast day the filter state is refreshed on the last `window_days` days of actual data and then 24 h are forecast, which is true day-ahead operation.
+
+```{r sarimax}
+sarimax_xreg <- function(s, K_day, K_week) {
+  how <- s$dow * 24 + s$hod
+  f <- list()
+  for (k in seq_len(K_day)) {
+    f[[paste0("sd", k)]] <- sin(2 * pi * k * s$hod / 24)
+    f[[paste0("cd", k)]] <- cos(2 * pi * k * s$hod / 24)
+  }
+  for (k in seq_len(K_week)) {
+    f[[paste0("sw", k)]] <- sin(2 * pi * k * how / 168)
+    f[[paste0("cw", k)]] <- cos(2 * pi * k * how / 168)
+  }
+  ex <- as.data.frame(s[, .(w_temp, hdd18, cdd24, is_holiday, is_weekend, is_august, hol_next, covid)])
+  X <- as.matrix(data.frame(f, ex))
+  apply(X, 2, fill_na)
+}
+
+fit_arima <- function(y, X) {
+  args <- list(d = 0, D = 0, seasonal = FALSE, max.p = 2, max.q = 2, max.order = 4,
+               stationary = TRUE, approximation = TRUE)
+  tryCatch(do.call(auto.arima, c(list(ts(y), xreg = X), args)),
+           error = function(e) tryCatch(
+             do.call(auto.arima, c(list(ts(na.interp(as.numeric(y))), xreg = X), args)),
+             error = function(e2) NULL))
+}
+
+sarimax_dayahead <- function(fit, s, X, days) {
+  cols <- intersect(colnames(X), colnames(fit$xreg))
+  rbindlist(lapply(days, function(d) {
+    i0 <- match(as.POSIXct(paste(d, "00:00:00"), tz = "UTC"), s$timestamp)
+    if (is.na(i0) || i0 + 23 > nrow(s)) return(NULL)
+    h0 <- i0 - CFG$window_days * 24
+    if (h0 < 1) return(NULL)
+    hist <- h0:(i0 - 1); fut <- i0:(i0 + 23)
+    if (mean(!is.na(s$y[hist])) < CFG$min_window_coverage) return(NULL)
+    tryCatch({
+      rf <- Arima(ts(s$y[hist]), model = fit, xreg = X[hist, cols, drop = FALSE])
+      fc <- forecast(rf, h = 24, xreg = X[fut, cols, drop = FALSE])
+      data.table(timestamp = s$timestamp[fut], pred_sarimax = pmax(as.numeric(fc$mean), 0))
+    }, error = function(e) NULL)
+  }))
+}
+
+tune_sarimax <- function(s) {
+  tr_idx <- which(s$split == "train")
+  vd <- sort(unique(s$date_utc[s$split == "valid" & !is.na(s$y)]))
+  vd <- vd[seq(1, length(vd), by = CFG$sarimax_valid_every_n_days)]
+  grid <- expand.grid(K_day = c(4, 8), K_week = c(2, 4))
+  if (CFG$quick_mode) grid <- grid[1, , drop = FALSE]
+  best <- NULL
+  for (g in seq_len(nrow(grid))) {
+    X <- sarimax_xreg(s, grid$K_day[g], grid$K_week[g])
+    keep <- colnames(X)[apply(X[tr_idx, , drop = FALSE], 2, function(v) isTRUE(sd(v) > 0))]
+    X <- X[, keep, drop = FALSE]
+    fit <- fit_arima(s$y[tr_idx], X[tr_idx, , drop = FALSE])
+    if (is.null(fit)) next
+    p <- sarimax_dayahead(fit, s, X, vd)
+    if (is.null(p) || nrow(p) == 0) next
+    m <- metrics(s$y[match(p$timestamp, s$timestamp)], p$pred_sarimax)
+    if (is.null(best) || isTRUE(m$CV_RMSE < best$cv))
+      best <- list(fit = fit, X = X, K_day = grid$K_day[g], K_week = grid$K_week[g],
+                   cv = m$CV_RMSE, order = paste(arimaorder(fit)[1:3], collapse = ","))
+  }
+  best
+}
+```
+
+# 8. Run every series
+
+```{r run}
+run_series <- function(s_raw, zone, load) {
+  fb <- build_features(s_raw); s <- fb$s; feats <- fb$feats
+  tr <- s[split == "train" & !is.na(y)]
+  if (nrow(tr) < 24 * 200) stop("fewer than 200 training days")
+
+  # LightGBM
+  tun <- tune_lgb(tr, feats)
+  mdl <- fit_lgb(tr, feats, tun$params, tun$nrounds)
+  s[, pred_lgb := pmax(predict(mdl, as.matrix(s[, ..feats])), 0)]
+  imp <- lgb.importance(mdl, percentage = TRUE)[order(-Gain)][1:min(15, .N)]
+
+  # SARIMAX
+  sx <- tune_sarimax(s)
+  s[, pred_sarimax := NA_real_]
+  if (!is.null(sx)) {
+    days <- sort(unique(s$date_utc[s$split %in% EVAL_SPLITS & !is.na(s$y)]))
+    p <- sarimax_dayahead(sx$fit, s, sx$X, days)
+    if (!is.null(p) && nrow(p)) s[p, pred_sarimax := i.pred_sarimax, on = "timestamp"]
+  }
+
+  # Evaluation: every model on the SAME hours so the comparison is fair
+  ev <- s[split %in% EVAL_SPLITS,
+          .(timestamp, split, actual = y, snaive = pred_snaive, lgb = pred_lgb, sarimax = pred_sarimax)]
+  common <- ev[complete.cases(ev)]
+  met <- rbindlist(lapply(c("snaive", "lgb", "sarimax"), function(m)
+    common[, c(list(model = m), metrics(actual, get(m))), by = split]))
+  met[, `:=`(zone = zone, load = load)]
+
+  preds <- melt(ev, id.vars = c("timestamp", "split", "actual"),
+                variable.name = "model", value.name = "prediction")[!is.na(prediction)]
+  preds[, `:=`(zone = zone, load_type = load)]
+
+  list(met = met, preds = preds, ev = ev, importance = imp[, series := paste(zone, load)],
+       info = list(n_feats = length(feats), lgb = tun$params[c("num_leaves", "learning_rate",
+                   "min_data_in_leaf", "feature_fraction", "bagging_fraction", "lambda_l2")],
+                   lgb_nrounds = tun$nrounds, lgb_cv = tun$cv, sx = sx[c("K_day", "K_week", "order", "cv")]))
+}
+
+groups <- unique(dt[, .(zone, load_group)])[order(load_group, zone)]
+if (!is.null(CFG$only_series)) groups <- groups[paste(zone, load_group) %in% CFG$only_series]
+results <- list()
+for (i in seq_len(nrow(groups))) {
+  z <- groups$zone[i]; l <- groups$load_group[i]
+  message("[", i, "/", nrow(groups), "] ", z, " ", l, "  (started ", format(Sys.time(), "%H:%M"), ")")
+  set.seed(CFG$seed + i)
+  results[[paste(z, l)]] <- tryCatch(run_series(dt[zone == z & load_group == l], z, l),
+                                     error = function(e) { message("  FAILED: ", conditionMessage(e)); NULL })
+}
+results <- Filter(Negate(is.null), results)
+```
+
+# 9. Results
+
+```{r metrics}
+met_all <- rbindlist(lapply(results, `[[`, "met"))
+setcolorder(met_all, c("zone", "load", "model", "split"))
+kable(met_all[order(load, zone, split, model)][, lapply(.SD, function(x) if (is.numeric(x)) round(x, 2) else x)],
+      caption = "ASHRAE 14 metrics per series, model and period (same hours for all models)")
+```
+
+```{r best}
+best <- met_all[split == "valid" & !is.na(CV_RMSE)][order(CV_RMSE), .SD[1], by = .(zone, load)]
+kable(best[, .(zone, load, best_model_on_validation = model, CV_RMSE = round(CV_RMSE, 1),
+               NMBE = round(NMBE, 1), ASHRAE_pass)],
+      caption = "Best model per series on the validation period (input for T39)")
+```
+
+```{r plot_cv, fig.height=5}
+ggplot(met_all[!is.na(CV_RMSE)], aes(paste(zone, load), CV_RMSE, fill = model)) +
+  geom_col(position = "dodge") + facet_wrap(~split) +
+  geom_hline(yintercept = 30, linetype = 2) + coord_flip() +
+  labs(x = NULL, y = "CV(RMSE) %", title = "Day-ahead CV(RMSE) by series (dashed line = ASHRAE 14 limit of 30 %)")
+```
+
+```{r plot_weeks, fig.height=3.5}
+for (nm in names(results)) {
+  for (pw in names(CFG$plot_weeks)) {
+    t0 <- as.POSIXct(CFG$plot_weeks[[pw]], tz = "UTC")
+    d <- results[[nm]]$ev[split == pw & timestamp >= t0 & timestamp < t0 + 7 * 86400]
+    if (nrow(d) < 48) next
+    long <- melt(d, id.vars = c("timestamp", "split"), measure.vars = c("actual", "snaive", "lgb", "sarimax"))
+    print(ggplot(long, aes(timestamp, value, colour = variable)) + geom_line(na.rm = TRUE) +
+            labs(title = paste(nm, "–", pw, "(one week)"), x = NULL, y = "Wh", colour = NULL))
+  }
+}
+```
+
+```{r importance}
+imp_all <- rbindlist(lapply(results, `[[`, "importance"))
+kable(imp_all[, .SD[1:5], by = series][, .(series, Feature, Gain = round(Gain, 3))],
+      caption = "Top-5 LightGBM features by gain (input for T33 / SHAP)")
+```
+
+# 10. Save outputs and update the experiment log
+
+```{r save}
+dir.create(CFG$out_dir, showWarnings = FALSE, recursive = TRUE)
+pred_all <- rbindlist(lapply(results, `[[`, "preds"))
+setcolorder(pred_all, c("timestamp", "zone", "load_type", "model", "split", "actual", "prediction"))
+fwrite(pred_all, file.path(CFG$out_dir, "T29_dayahead_predictions.csv"))
+fwrite(met_all,  file.path(CFG$out_dir, "T29_metrics_ashrae.csv"))
+fwrite(imp_all,  file.path(CFG$out_dir, "T29_lgb_importance.csv"))
+saveRDS(lapply(results, `[[`, "info"), file.path(CFG$out_dir, "T29_best_params.rds"))
+
+# ---- experiment log (columns agreed in T20) ----
+train_period <- paste(SPLITS$train, collapse = " to ")
+log_rows <- rbindlist(lapply(names(results), function(nm) {
+  r <- results[[nm]]; m <- copy(r$met); inf <- r$info
+  lgb_txt <- paste(names(inf$lgb), unlist(inf$lgb), sep = "=", collapse = ", ")
+  sx_txt  <- sprintf("SARIMAX ARIMA(%s) errors, Fourier K_day=%s K_week=%s", inf$sx$order, inf$sx$K_day, inf$sx$K_week)
+  model_lab <- c(snaive = "Seasonal naive (same hour last week)",
+                 lgb = paste0("LightGBM (", lgb_txt, ", nrounds=", inf$lgb_nrounds, ")"),
+                 sarimax = sx_txt)
+  feat_lab <- c(snaive = "lag_168",
+                lgb = sprintf("%d features: calendar, weather lags 0-6 h, target lags >=24 h, rolling means, indoor lag24/168", inf$n_feats),
+                sarimax = "Fourier daily/weekly + outdoor temp, HDD/CDD, holiday, weekend, August, COVID")
+  m[, .(ID = NA_integer_, date = format(Sys.Date()), author = CFG$author,
+        series = nm, features = feat_lab[model], model = model_lab[model],
+        `train period` = train_period,
+        `test period` = paste0(split, ": ", vapply(split, function(x) paste(SPLITS[[x]], collapse = " to "), "")),
+        MAE = round(MAE, 1), RMSE = round(RMSE, 1),
+        `CV(RMSE)` = round(CV_RMSE, 2), NMBE = round(NMBE, 2),
+        notes = sprintf("T29 day-ahead (issued 00:00 UTC); n=%d h on common hours; ASHRAE14 %s; weather: %s (used as forecast proxy)",
+                        n, ifelse(ASHRAE_pass, "PASS", "FAIL"), WEATHER_SOURCE))]
+}))
+
+old <- NULL
+if (file.exists(CFG$log_file)) {
+  file.copy(CFG$log_file, paste0(CFG$log_file, ".bak"), overwrite = TRUE)
+  old <- as.data.table(read.xlsx(CFG$log_file, check.names = FALSE))
+}
+last_id <- if (!is.null(old) && nrow(old)) suppressWarnings(max(as.integer(gsub("\\D", "", old$ID)), na.rm = TRUE)) else 0
+if (!is.finite(last_id)) last_id <- 0
+log_rows[, ID := last_id + seq_len(.N)]
+if (!is.null(old)) {
+  old[, names(old) := lapply(.SD, as.character)]
+  log_rows[, names(log_rows) := lapply(.SD, as.character)]
+}
+full_log <- rbindlist(list(old, log_rows), fill = TRUE)
+write.xlsx(full_log, CFG$log_file, overwrite = TRUE)
+message(nrow(log_rows), " rows added to ", CFG$log_file)
+kable(head(log_rows, 6), caption = "First new experiment-log rows")
+```
+
+# 11. Notes for the team
+
+* **Forecast file for Team B (T34, T35, T38, T40):** `outputs_T29/T29_dayahead_predictions.csv` is in long format (timestamp, zone, load_type, model, split, actual, prediction). If `team_b_eval.py` expects other column names, rename them here.
+* **Not scored:** the first days of the 2025 test block have no preceding history (902-day gap), so SARIMAX skips them (less than 50 % of the history window). The comparison table uses only hours where all three models have a forecast.
+* **Next steps:** T30 (floor total) and T31 (NE) can reuse `build_features()` and the tuning functions. T33 (SHAP) can use the saved LightGBM models if you add `saveRDS(mdl, ...)` inside `run_series()`. T37 (multi-day horizons) needs lags ≥ 24·h for each horizon.
+
+```{r session}
+sessionInfo()
+```

@@ -196,3 +196,44 @@ Besides, the structure of the template and any other aspect of this document can
 | **Interpretation** | • Building thermal mass introduces a delayed response to external weather changes. Including 1–3 hour lags improves short-term HVAC predictability. |
 | **Issued found** | • Alignment between UTC weather timestamps and local Madrid timestamps required explicit time zone conversions to avoid phase shifts in lag calculations. |
 | **Extras** | • Task executed by Catherine (Subteams C & A). Covers backlog item **F5.3**. |
+
+
+---
+
+### Entry 12 — 02/11/2026
+
+| Field | Content |
+|---|---|
+| **Date** | 02/11/2026 |
+| **Dataset version** | v0.4 (`cedint_f1_hourly_clean.csv` |
+| **Cleaning steps** | No cleaning, file was already clean |
+| **Model tested** | Day-ahead (24 h) forecasts, issued at 00:00 UTC, for 10 series: HVAC (NE, NW, SE), Lighting (NW, SE, SW), Plugs & Sockets (NE, NW, SE, SW).
+1. Seasonal naive baseline (same hour last week).
+2. SARIMAX: ARIMA errors with daily and weekly Fourier terms, plus outdoor temperature, degree-hours, holiday, weekend, August and COVID flags.
+3. LightGBM with an expanding-window TimeSeriesSplit.
+Split (T32): train 2020-06 → 2022-06, validate 2022-H2, test 2023 and 2025. |
+| **Parameters tested** | LightGBM: random search (quick mode: 6 configurations, 3 folds of 28 days) over num_leaves (15–127), learning_rate (0.02–0.1), min_data_in_leaf (20–200), feature_fraction, bagging_fraction and lambda_l2 (0–50). Best configurations vary by series, for example NW HVAC: 127 leaves, lr 0.05, min_data 200, 62 rounds.
+34–42 features: calendar and holidays, weather lags 0–6 h, target lags ≥ 24 h (24–336 h), rolling means, indoor values lagged ≥ 24 h.
+SARIMAX: Fourier terms (daily K=4, weekly K=2), ARIMA order selected per series (mostly (2,0,0)), state refreshed on the last 14 days before each forecast. Only one K combination was tested in quick mode. |
+| **Results obtained** | CV(RMSE) % on the validation period (2022-H2), seasonal naive / SARIMAX / LightGBM:
+• NW HVAC: 105 / 105 / 67
+• SE HVAC: 66 / 56 / 54
+• NE HVAC: 344 / 245 / 256
+• NW Plugs: 74 / 87 / 52
+• SE Plugs: 160 / 154 / 129
+• NE Plugs: 45 / 47 / 35
+• SW Plugs: 25 / 30 / 21
+• NW Lighting: 157 / 124 / 113
+• SE Lighting: 390 / 321 / 295
+• SW Lighting: 362 / 288 / 262
+LightGBM is the best model on validation in 9 of 10 series (SARIMAX in the other).
+Passing ASHRAE 14 (CV(RMSE) ≤ 30 % and |NMBE| ≤ 10 %): SW Plugs (LightGBM 21 % on validation, 29.8 % on 2023) and NE Plugs on 2025 (8 %). No HVAC or Lighting series passes yet, except NE HVAC with the naive model on 2025. |
+| **Interpretation** |  LightGBM improves clearly on the baseline for the main loads (for example NW HVAC from 105 % to 67 %). The NW HVAC baseline (≈105 %) matches the T21 result (102.85 %), so the metric and the split are consistent with subteam D’s previous work.
+Plugs & Sockets is the most predictable load, as expected from its link to occupancy and the working calendar. Lighting and HVAC are harder and are far from the 30 % target in this run.
+SARIMAX is weaker than LightGBM, especially on NW HVAC, because a linear model with Gaussian errors fits an on/off-like HVAC pattern poorly.
+These results are preliminary (quick mode) and should be repeated with the full search. |
+| **Issued found** | • CV(RMSE) is inflated on very low-consumption series (NE HVAC, SE Lighting: a few Wh per hour). A small absolute error (NE HVAC MAE ≈ 0.8 Wh) gives a CV(RMSE) of hundreds of percent, so MAE should also be reported for these.
+• The 2025 test covers only 18 Aug – 13 Oct 2025, and 2023 only Jan – Mar. SW has no 2025 data, so SW is evaluated on 2023 only.
+• NE has no indoor environmental sensors, so it uses only outdoor weather and calendar features.
+• SARIMAX skips the first days of the 2025 block because the 902-day gap leaves no history. |
+| **Extras** | • Task executed by María Herraiz . Covers backlog item **F1.2**, T29 |
