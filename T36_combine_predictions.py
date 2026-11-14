@@ -10,8 +10,11 @@ What it does
         validation = Jul-Dec 2022 · test_2023 = Jan-Feb 2023 · test_2025 = Aug-Oct 2025
   4. Drops training-period rows (models are only scored on validation/test).
   5. Removes duplicates (same hour, series and model) and writes one csv.
+  6. Optional (recommended): with the clean-data folder as 3rd argument, it checks per model that
+     y_true matches energy_wh_model at that UTC hour. If a model saved LOCAL time in `timestamp_utc`
+     (found for gbm), its timestamps are converted to UTC so all models line up hour by hour.
 
-Run:  python combine_predictions.py <folder_with_model_outputs> all_model_predictions.csv
+Run:  python combine_predictions.py <folder_with_model_outputs> all_model_predictions.csv [cleaned]
 """
 import glob, io, os, sys, zipfile
 import pandas as pd
@@ -66,6 +69,28 @@ if __name__ == "__main__":
     p = pd.concat(parts, ignore_index=True)
     p["timestamp_utc"] = pd.to_datetime(p["timestamp_utc"])
     p["model"] = p["model"].astype(str).str.strip().str.lower()
+    if len(sys.argv) > 3:                                   # timestamp check against the clean dataset
+        c = pd.read_csv(os.path.join(sys.argv[3], "cedint_f1_hourly_clean.csv.gz"),
+                        usecols=["timestamp_utc", "timestamp_local", "zone", "load_type", "energy_wh_model"],
+                        parse_dates=["timestamp_utc", "timestamp_local"])
+        key = ["zone", "load_type"]
+        fixed = []
+        for m in p["model"].unique():
+            g = p[p["model"] == m]
+            a = g.merge(c, on=["timestamp_utc"] + key, how="left")
+            bad_utc = (~((a["y_true"] - a["energy_wh_model"]).abs() < 0.01)).mean()
+            b = g.merge(c.rename(columns={"timestamp_utc": "_utc", "timestamp_local": "timestamp_utc"}),
+                        on=["timestamp_utc"] + key, how="left")
+            bad_loc = (~((b["y_true"] - b["energy_wh_model"]).abs() < 0.01)).mean()
+            if bad_utc > 0.5 and bad_loc < 0.05:
+                print(f"  fix  {m}: timestamps were local time -> converted to UTC "
+                      f"({bad_utc:.0%} mismatch as UTC, {bad_loc:.1%} as local)")
+                b = b.dropna(subset=["_utc"]).drop_duplicates(["_utc"] + key + ["model"])
+                fixed.append(b.assign(timestamp_utc=b["_utc"])[NEED])
+            else:
+                print(f"  check {m}: y_true matches the clean dataset in {1 - bad_utc:.1%} of rows")
+                fixed.append(g)
+        p = pd.concat(fixed, ignore_index=True)
     p["split"] = "unused"
     for s, (a, b) in SPLITS.items():
         p.loc[p["timestamp_utc"].between(pd.Timestamp(a), pd.Timestamp(b)), "split"] = s
