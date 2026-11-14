@@ -161,3 +161,19 @@ Launch with multi-zone GBM predictions:
 
 ```bash
 streamlit run T36_dashboard_app.py -- --data cleaned --pred All_Zones_GBM_predictions.csv
+
+## Compare all models
+
+1. Download the model outputs from the repo into a folder `model_outputs`
+   (`*_Chronos.zip`, `*_Catboost.zip`, `*_RandomForest.zip`, `All_Zones_GBM_predictions.csv`,
+   `outputs_T29/T29_dayahead_predictions.csv`, and optionally `reference_predictions.csv`).
+2. Combine them into one file:
+   ```bash
+   python T36_combine_predictions.py model_outputs all_model_predictions.csv
+   ```
+3. Start the dashboard:
+   ```bash
+   streamlit run T36_dashboard_app.py -- --data cleaned --pred all_model_predictions.csv
+   ```
+4. Tab **Forecast vs actual** → section **Model comparison**: all models on the same hours,
+   benchmarks in grey, ASHRAE 14 line at 30 %.
