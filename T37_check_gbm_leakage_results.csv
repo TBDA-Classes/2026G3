@@ -1,0 +1,7 @@
+variant,test,n,CV_RMSE_pct,NMBE_pct
+A notebook as is,2023,802,29.6,4.3
+A notebook as is,2025,1160,84.8,1.2
+B roll_mean shifted 24 h,2023,802,49.6,16.0
+B roll_mean shifted 24 h,2025,1160,98.5,-0.7
+C fully day-ahead,2023,802,49.5,14.3
+C fully day-ahead,2025,1160,98.4,-13.5
