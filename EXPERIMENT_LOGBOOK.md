@@ -300,3 +300,64 @@ These results are preliminary (quick mode) and should be repeated with the full 
 | **Interpretation** | • Combining a time-series foundation model (Chronos, strong on temporal shape/periodicity) with a gradient-boosted tree model (GBM, strong on exogenous weather and calendar flags) reduces variance and improves stability across heterogeneous Floor 1 zones. |
 | **Issued found** | • Consistent formatting of prediction CSVs (`timestamp_utc, zone, load_type, model, split, y_true, y_pred`) is essential so all zone outputs can be directly ingested into `team_b_eval.py` and the Streamlit dashboard (`T36_dashboard_app.py`). |
 | **Extras** | • Executed by Joos van Lommel (`Joosvanlommel`). Files: `GBM_forallzones.ipynb`, `blend_model_chronos&gbm.ipynb`, `Model_Comparison_ASHRAE.xlsx`.<br>• Project documentation and `README.md` synchronized on main branch by Anthony Rivière (`Anthoriv974`). |
+
+
+---
+
+### Entry 17 — 14/11/2026
+
+| Field | Content |
+|---|---|
+| **Date** | 14/11/2026 |
+| **Dataset version** | v0.4 (`cedint_f1_model_ready.csv` |
+| **Cleaning steps** | No cleaning, file was already clean |
+| **Model tested** | 
+| **Parameters tested** | 
+| **Results obtained** |
+| **Interpretation** | 
+| **Issued found** | 
+| **Extras** | • Task executed by María Herraiz . Covers backlog item **F1.3**, T30 |
+
+| **Cleaning steps** | • No cleaning of values: the file was already clean.
+| **Model tested** | • **Floor 1 total, day-ahead (24 h) forecast (F1.3 / T30)**, six methods compared on the same hours: 
+    - Seasonal naive (same hour last week, baseline)
+    – LightGBM direct on the floor total
+    – Bottom-up (sum of the 13 zone × load forecasts)
+    – Hierarchical reconciliation: OLS, WLS (structural) and MinT-shrink. |
+| **Parameters tested** |  Hierarchy of 22 nodes (total, 4 zones, 4 load types, 13 bottom series), one LightGBM model per node.  LightGBM: learning_rate 0.05, num_leaves 31, min_data_in_leaf 50, feature_fraction 0.8, bagging_fraction 0.8, 300 fixed rounds, seed 42 (no tuning). Features: lag_24, lag_48, lag_168, mean_prev_24h, mean_prev_7d, hour, wday, month, is_weekend, is_holiday, is_august_low_use, flag_covid_2020 (no weather or indoor variables). All lags ≥ 24 h, so no leakage. Reconciliation: MinT shrinkage λ = 0.018; negative forecasts clipped to 0 and aggregates rebuilt. Train 2020-06-01 to 2022-06-30; validation 2022-07-01 to 2022-12-31 (2,682 valid h); test 2023 = 586 valid h (19 Jan – 1 Mar 2023). 2025 has 0 valid hours (SW has no 2025 data). |
+| **Results obtained** |    **Validation** CV(RMSE) % / NMBE %: seasonal naive 50.57 / −4.19; LightGBM direct 41.95 / +2.41; bottom-up 39.63 / +4.17; OLS 39.71 / +5.81; WLS 38.55 / +4.35; MinT 38.32 / +3.81.
+                            **Test 2023** CV(RMSE) % / NMBE % (MAE Wh/h): seasonal naive 45.21 / +6.30 (994); LightGBM direct 38.64 / +7.91 (969); bottom-up 37.98 / +7.42 (966); OLS 37.85 / +10.40 (964); WLS 37.14 / +8.54 (945); MinT 37.40 / +7.86 (958).
+                            **No method passes ASHRAE 14** (CV(RMSE) ≤ 30 %, NMBE within ±10 %) in validation or test; OLS also fails NMBE in test.
+                            Zone level (test, direct model): NE 28.4 % (pass), NW 46.9 %, SW 62.5 %, SE 103.4 %. NW Plugs & Sockets (CV 53.5 %, MAE 826 Wh/h) is the main source of floor-total error.
+                            Coherence (test): the direct total differs from the sum of the zone forecasts by 437 Wh/h (12.8 % of mean consumption); all reconciled forecasts have gap = 0.
+                            Files: `T30_floor1_total_forecast_results.xlsx`, `T30_floor1_total_forecast_hourly.csv`, `T30_experiment_log_rows.csv`, figures `T30_total_forecast_vs_actual.png`, `T30_total_MAE_by_hour.png`, `T30_coherence_gap.png`. |
+| **Interpretation** |  All LightGBM-based methods beat the seasonal-naive baseline (about 8 CV points in test), but the best result (WLS, 37.14 %) is still above the 30 % ASHRAE threshold. The model is not good enough for the floor total, which supports trying other approaches.
+                        Reconciliation improves accuracy only slightly (about 1.5 CV points vs the direct model). The differences between OLS, WLS and MinT are within noise, so no method can be declared best. Its main benefit is coherence between total and zones.
+                        Error is concentrated in working hours (MAE ≈ 1.4–1.7 kWh between 07:00 and 15:00 vs ≈ 0.55 kWh at night). The models smooth the peaks (hours above 6 kWh: actual mean 7.8 kWh vs forecast 6.4 kWh) and over-forecast low-load periods (all methods have positive NMBE; Lighting is strongly over-forecast).
+| **Issued found** |  The 2025 test block could not be evaluated: SW has no valid 2025 data, so no hour passes the "all series valid" rule. `test_2023` and `test_all` are identical.
+                      The test set is small and fragmented (586 h, 19 Jan – 1 Mar 2023, winter only). The test period written in `T30_experiment_log_rows.csv` (2023-01-01 to 2023-12-31) overstates the real coverage.
+                      Midday hours are barely represented (only 8–13 test hours at 12:00–14:00), so the MAE-by-hour curve is unreliable there.
+                      Validation metrics of OLS/WLS/MinT are optimistic: the reconciliation weights are estimated from the validation residuals. Only the test results are out-of-sample.
+                      Regex bug: Emergency Lighting series were not excluded from the total (negligible effect).
+                      In the forecast-vs-actual plot, lines are drawn across data gaps (misleading straight segments). |
+| **Extras** | • Task executed by María Herraiz.|
+
+
+
+### Entry 18 — 14/11/2026
+
+| Field | Content |
+|---|---|
+| **Date** | 14/11/2026 |
+| **Dataset version** | v0.4 (`cedint_f1_model_ready.csv`) |
+| **Cleaning steps** | • No cleaning of values: the file was already clean.• Used the `split`, `include_train` and `include_eval` columns of the file (training rows: `include_train = 1`; evaluation rows: `include_eval = 1`, no shuffling).• Kept only HVAC, Lighting and Plugs & Sockets (10 zone × load series: NE HVAC, NE P&S, NW HVAC, NW Lighting, NW P&S, SE HVAC, SE Lighting, SE P&S, SW Lighting, SW P&S). Secondary loads and SE Projector excluded.• Lags computed by timestamp (not by row), so they are empty across the 902-day gap. Hours without a value 168 h earlier are not scored, so both models are compared on the same hours. |
+| **Model tested** | • **Day-ahead (24 h) forecast per zone × load type (F1.2 / T29)** in `F1.2_T29_dayahead_models_MH_v2.Rmd`:
+    – Seasonal naive (same hour last week, baseline).
+    – LightGBM (one model per series).
+  • SARIMAX (part of the original T29 plan) was not run in this version, just the LightGBM model. |
+| **Parameters tested** | • **LightGBM:** 6 configurations per series (num_leaves 15/31/63 × min_data_in_leaf 20/100); fixed learning_rate 0.05, feature_fraction 0.8, bagging_fraction 0.8, lambda_l2 1; up to 500 rounds with early stopping (30) on the validation period; best configuration chosen on validation RMSE. Chosen: num_leaves 15 in 7 of 10 series, 31 in the other 3; best iterations 35–128.• **Features (14 for NE, 18 for the others):** local hour, weekday, month, is_weekend, is_holiday, is_august_low_use, flag_covid_2020; target lags 24, 48, 72, 168, 336 h; mean of the previous day; same-hour mean of the last 7 days; indoor temp, humidity, luminosity and occupancy lagged 24 h (NE has no indoor sensors). All target features lagged ≥ 24 h (no leakage). No outdoor weather.• **Split:** train 2020-06-01 to 2022-06-30; validation 2022-07-01 to 2022-12-31; test_2023 2023-01-01 to 2023-02-28; test_2025 2025-08-18 to 2025-10-13. |
+| **Results obtained** | • **LightGBM beats the seasonal naive in 26 of 28 series-period comparisons** (validation 10/10, test 2023 9/10, test 2025 7/8). It loses only in SE Lighting 2023 (211.6 vs 197.3 %) and NW Lighting 2025 (157.0 vs 117.9 %).• **ASHRAE 14 pass (CV(RMSE) ≤ 30 %, NMBE within ±10 %), LightGBM:** validation 1/10 (SW P&S 20.4 %); test 2023 2/10 (NE P&S 26.5 %, SW P&S 29.3 %); test 2025 2/8 (NE HVAC 17.6 %, NE P&S 6.7 %). All other series fail.• **Test 2023, CV(RMSE) % LightGBM (naive):** HVAC: NE 689.7 (974.9), NW 47.2 (104.0), SE 49.0 (66.6). Lighting: NW 91.1 (117.4), SE 211.6 (197.3), SW 193.1 (209.8). Plugs & Sockets: NE 26.5 (53.8), NW 53.4 (63.8), SE 144.0 (173.8), SW 29.3 (38.5).• **Test 2025, CV(RMSE) % LightGBM (naive):** HVAC: NE 17.6 (25.0), NW 95.4 (133.5), SE 35.8 (44.3). Lighting: NW 157.0 (117.9), SE 325.4 (408.0). Plugs & Sockets: NE 6.7 (10.8), NW 41.7 (54.6), SE 34.7 (43.9). SW has no 2025 data.• The main load, NW Plugs & Sockets, reaches CV 53.4 % (MAE 1,106 Wh) in 2023 and 41.7 % (MAE 179 Wh) in 2025.• Top LightGBM features by gain: `lag_24`, `mean_prev_day` and `same_hour_mean_7d` in almost every series; `lum_lux_l24` is second or third for NW and SE Lighting.• Files: `T29_dayahead_predictions.csv`, `T29_metrics_ashrae.csv`, `T29_best_params.csv`, `T29_lgb_importance.csv`, `T29_experiment_log_rows.csv` (56 rows), `zone_load_forecasts_T29.csv` (input for T30), figure `Day_ahead_CV_by_series_T29.png`. |
+| **Interpretation** | • LightGBM is clearly better than the baseline, but it reaches the ASHRAE 14 limit in only a few series. Plugs & Sockets is the most predictable load (calendar-driven), HVAC is intermediate, and Lighting is the worst, with large systematic bias (NMBE: NW Lighting +27.8 % in 2023 and +98.0 % in 2025; SE Lighting −76.9 % and −85.8 %).<br>• The importance ranking shows that the models mainly extrapolate the recent past (previous day, same hour last week). Calendar flags and indoor drivers add little, except lagged luminosity for Lighting.<br>• Results for test 2023 (Jan–Feb, winter) and test 2025 (Aug–Oct) are not directly comparable: they cover different seasons and only about 2 months each. 2025 is better in several series (e.g. NW Plugs & Sockets 53.4 → 41.7 %), but this cannot be attributed to the model.<br>• CV(RMSE) is unreliable for very low-consumption series (NE HVAC: mean of only a few Wh per hour; 689.7 % in 2023 vs 17.6 % in 2025 with MAE 4.6 vs 0.4 Wh). This agrees with the CV inflation seen in Entry 15. |
+| **Issued found** | • SW has no 2025 data, so it is evaluated on 2023 only; NE has no Lighting and SW no HVAC.• Test periods are short (2023: Jan–Feb; 2025: 18 Aug – 13 Oct).• Validation metrics are slightly optimistic: validation is used for early stopping and for choosing the configuration. Only the test results are out-of-sample.• Strong bias in Lighting forecasts (see Interpretation); possible level shifts or changes in use between periods still to be checked.• `zone_load_forecasts_T29.csv` covers only the 10 core series. |
+| **Extras** | • Task executed by María Herraiz. Covers backlog item **F1.2**, T29.|
+
