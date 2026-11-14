@@ -1,0 +1,11 @@
+series,num_leaves,min_data_in_leaf,learning_rate,feature_fraction,bagging_fraction,lambda_l2,best_iteration,n_features,valid_rmse
+NE HVAC,15,20,0.05,0.8,0.8,1,35,14,6.6
+NE Plugs & Sockets,31,100,0.05,0.8,0.8,1,67,14,46.45
+NW HVAC,15,100,0.05,0.8,0.8,1,65,18,70.92
+NW Lighting,15,100,0.05,0.8,0.8,1,61,18,107.44
+NW Plugs & Sockets,15,20,0.05,0.8,0.8,1,114,18,756.26
+SE HVAC,15,20,0.05,0.8,0.8,1,128,18,34.98
+SE Lighting,31,20,0.05,0.8,0.8,1,53,18,265.04
+SE Plugs & Sockets,15,20,0.05,0.8,0.8,1,79,18,128.78
+SW Lighting,31,20,0.05,0.8,0.8,1,95,18,236.29
+SW Plugs & Sockets,15,100,0.05,0.8,0.8,1,79,18,63.21

@@ -182,6 +182,7 @@ if (!CFG$include_secondary)
 
 # bottom series = zone x load type with at least one valid value
 meta <- unique(raw[!is.na(y), .(zone, load)])
+
 meta[, series := gsub("[^A-Za-z0-9]+", "_", paste(zone, load, sep = "_"))]
 setorder(meta, zone, load)
 raw <- merge(raw, meta, by = c("zone", "load"))

@@ -1,0 +1,274 @@
+---
+title: "T29 (F1.2) – Day-ahead models: seasonal naive and LightGBM (simplified)"
+subtitle: "DataPack Energy Forecaster – CeDInt floor 1 (TBDA) · Sprint 3"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.width = 10, fig.height = 5)
+```
+
+# 1. What this document does
+
+**Task T29 (F1.2):** day-ahead (24 h) forecasts of `energy_wh_model` for HVAC, Lighting and Plugs & Sockets in every zone where the load exists, using the model-ready dataset v0.4.
+
+| Item | Decision |
+|---|---|
+| Input | `cedint_f1_model_ready.csv` only (no internet, no extra files) |
+| Series | zone × load type for HVAC, Lighting, Plugs & Sockets (10 series) |
+| Models | Seasonal naive (same hour last week) and LightGBM |
+| Split | The `split` column of the file (train 2020-06 → 2022-06, validation 2022-H2, test 2023, test 2025). Rows are used only if `include_train = 1` (training) or `include_eval = 1` (evaluation). |
+| Day-ahead rule | Every feature derived from the target is lagged by **24 h or more**, so the forecast for hour *t* only uses data up to *t − 24 h*. |
+| Tuning | 6 LightGBM configurations. Each one is trained on the training rows and stopped early on the validation rows. The best on validation is kept. No cross-validation loop. |
+| Outputs | Predictions, ASHRAE 14 metrics, best parameters, feature importance, experiment-log rows and a forecast file for T30. |
+
+# 2. Packages and configuration
+
+```{r packages}
+pkgs <- c("data.table", "lightgbm", "ggplot2", "knitr")
+miss <- setdiff(pkgs, rownames(installed.packages()))
+if (length(miss)) stop("Install first: install.packages(c(", paste0("'", miss, "'", collapse = ", "), "))")
+invisible(lapply(pkgs, library, character.only = TRUE))
+```
+
+```{r config}
+CFG <- list(
+  data_file = "cedint_f1_model_ready.csv",   
+  out_dir   = "outputs_T29",
+  author    = "María Herraiz",
+  loads     = c("HVAC", "Lighting", "Plugs & Sockets"),
+  eval_splits = c("validation", "test_2023", "test_2025"),
+  max_rounds  = 500,      # maximum LightGBM trees (early stopping usually stops earlier)
+  early_stop  = 30,
+  threads     = 4,
+  seed        = 42
+)
+dir.create(CFG$out_dir, showWarnings = FALSE, recursive = TRUE)
+set.seed(CFG$seed)
+```
+
+# 3. Helpers
+
+```{r helpers}
+# ASHRAE Guideline 14 (hourly): CV(RMSE) <= 30 %, |NMBE| <= 10 %.
+# NMBE > 0 means over-forecast (same convention as T30).
+metrics <- function(a, p) {
+  ok <- is.finite(a) & is.finite(p); a <- a[ok]; p <- p[ok]; n <- length(a)
+  if (n < 24) return(data.table(n = n, MAE = NA_real_, RMSE = NA_real_,
+                                CV_RMSE = NA_real_, NMBE = NA_real_, ASHRAE_pass = NA))
+  rmse <- sqrt(mean((a - p)^2)); cv <- 100 * rmse / mean(a); nmbe <- 100 * sum(p - a) / (n * mean(a))
+  data.table(n = n, MAE = mean(abs(a - p)), RMSE = rmse, CV_RMSE = cv, NMBE = nmbe,
+             ASHRAE_pass = (cv <= 30) & (abs(nmbe) <= 10))
+}
+
+# Value of y exactly k hours earlier. Matching on the timestamp (not on the row position)
+# keeps the lags correct across the 902-day gap: there the lag is NA.
+lagk <- function(y, tn, k) y[match(tn - k * 3600, tn)]
+```
+
+# 4. Data
+
+```{r data}
+if (!file.exists(CFG$data_file)) stop("Cannot find ", CFG$data_file, " in ", getwd())
+
+keep <- c("timestamp_utc", "zone", "load_type", "split", "include_train", "include_eval",
+          "energy_wh_model", "hour_local", "dayofweek_local", "month_local", "is_weekend",
+          "is_holiday", "is_august_low_use", "flag_covid_2020",
+          "temp_c", "hum_pct", "lum_lux", "occupancy")
+dt <- fread(CFG$data_file, select = keep, colClasses = list(character = "timestamp_utc"))
+dt <- dt[load_type %in% CFG$loads]
+dt[, ts := as.POSIXct(timestamp_utc, tz = "UTC", format = "%Y-%m-%d %H:%M:%S")]
+stopifnot(!anyNA(dt$ts), !anyDuplicated(dt, by = c("ts", "zone", "load_type")))
+setnames(dt, "energy_wh_model", "y")
+setorder(dt, zone, load_type, ts)
+
+series <- unique(dt[, .(zone, load_type)])
+kable(dt[, .(hours_with_target = sum(!is.na(y)),
+             train = sum(include_train == 1 & !is.na(y)),
+             validation = sum(include_eval == 1 & split == "validation" & !is.na(y)),
+             test_2023 = sum(include_eval == 1 & split == "test_2023" & !is.na(y)),
+             test_2025 = sum(include_eval == 1 & split == "test_2025" & !is.na(y))),
+         by = .(zone, load_type)],
+      caption = "Usable hours per series (SW has no 2025 data; NE has no Lighting; SW has no HVAC)")
+```
+
+# 5. Features (day-ahead safe)
+
+```{r features}
+make_features <- function(s) {
+  tn <- as.numeric(s$ts); y <- s$y
+  for (k in c(24, 48, 72, 168, 336)) set(s, j = paste0("lag_", k), value = lagk(y, tn, k))
+  r24 <- rowMeans(sapply(24:47, function(k) lagk(y, tn, k)), na.rm = TRUE)       # mean of the previous day
+  r7d <- rowMeans(sapply(1:7, function(d) lagk(y, tn, 24 * d)), na.rm = TRUE)    # same hour, last 7 days
+  set(s, j = "mean_prev_day",     value = ifelse(is.nan(r24), NA_real_, r24))
+  set(s, j = "same_hour_mean_7d", value = ifelse(is.nan(r7d), NA_real_, r7d))
+  for (v in c("temp_c", "hum_pct", "lum_lux", "occupancy"))   # indoor drivers, lagged 24 h only
+    set(s, j = paste0(v, "_l24"), value = lagk(s[[v]], tn, 24))
+  s
+}
+
+base_feats <- c("hour_local", "dayofweek_local", "month_local", "is_weekend", "is_holiday",
+                "is_august_low_use", "flag_covid_2020",
+                paste0("lag_", c(24, 48, 72, 168, 336)), "mean_prev_day", "same_hour_mean_7d",
+                paste0(c("temp_c", "hum_pct", "lum_lux", "occupancy"), "_l24"))
+```
+
+# 6. Train and evaluate one series
+
+```{r model}
+GRID <- data.table(expand.grid(num_leaves = c(15, 31, 63), min_data_in_leaf = c(20, 100)))
+
+run_series <- function(s) {
+  s <- make_features(copy(s))
+  tr <- s[include_train == 1 & !is.na(y)]
+  va <- s[include_eval == 1 & split == "validation" & !is.na(y)]
+  if (nrow(tr) < 24 * 100 || nrow(va) < 24) stop("too little training/validation data")
+
+  # drop features that are empty in training (e.g. NE has no indoor sensors)
+  feats <- base_feats[vapply(base_feats, function(f) any(!is.na(tr[[f]])), logical(1))]
+  Xtr <- as.matrix(tr[, ..feats]); Xva <- as.matrix(va[, ..feats])
+
+  best <- NULL
+  for (i in seq_len(nrow(GRID))) {
+    prm <- list(objective = "regression", metric = "rmse", learning_rate = 0.05,
+                num_leaves = GRID$num_leaves[i], min_data_in_leaf = GRID$min_data_in_leaf[i],
+                feature_fraction = 0.8, bagging_fraction = 0.8, bagging_freq = 1, lambda_l2 = 1,
+                early_stopping_round = CFG$early_stop, seed = CFG$seed,
+                num_threads = CFG$threads, verbosity = -1)
+    dtr <- lgb.Dataset(Xtr, label = tr$y)
+    dva <- lgb.Dataset.create.valid(dtr, Xva, label = va$y)
+    m <- lgb.train(params = prm, data = dtr, nrounds = CFG$max_rounds,
+                   valids = list(valid = dva), verbose = -1)
+    sc <- m$best_score
+    if (is.null(best) || sc < best$score) best <- list(model = m, score = sc, prm = prm, iter = m$best_iter)
+  }
+
+  # predictions for all evaluation rows
+  ev <- s[include_eval == 1 & split %in% CFG$eval_splits & !is.na(y)]
+  ev[, lgb := pmax(predict(best$model, as.matrix(ev[, ..feats]), num_iteration = best$iter), 0)]
+  ev[, naive := lag_168]
+
+  # fair comparison: same hours for both models (hours where lag_168 exists)
+  common <- ev[!is.na(naive)]
+  met <- rbindlist(list(
+    common[, c(list(model = "SeasonalNaive"), metrics(y, naive)), by = split],
+    common[, c(list(model = "LightGBM"),      metrics(y, lgb)),   by = split]))
+
+  imp <- lgb.importance(best$model, percentage = TRUE)[order(-Gain)][1:min(10, .N), .(Feature, Gain)]
+  list(met = met, ev = ev, imp = imp, n_feats = length(feats),
+       par = best$prm[c("num_leaves", "min_data_in_leaf", "learning_rate", "feature_fraction",
+                        "bagging_fraction", "lambda_l2")],
+       iter = best$iter, valid_rmse = best$score)
+}
+```
+
+# 7. Run all series
+
+Each series takes seconds. The message shows progress and the time used.
+
+```{r run}
+results <- list(); timing <- list()
+for (i in seq_len(nrow(series))) {
+  z <- series$zone[i]; l <- series$load_type[i]; key <- paste(z, l)
+  t0 <- Sys.time()
+  results[[key]] <- tryCatch(run_series(dt[zone == z & load_type == l]),
+                             error = function(e) { message("FAILED ", key, ": ", conditionMessage(e)); NULL })
+  secs <- round(as.numeric(difftime(Sys.time(), t0, units = "secs")), 1)
+  timing[[key]] <- data.table(series = key, seconds = secs, ok = !is.null(results[[key]]))
+  message(sprintf("[%d/%d] %s  %.1f s", i, nrow(series), key, secs))
+}
+failed <- names(results)[vapply(results, is.null, logical(1))]
+results <- Filter(Negate(is.null), results)
+if (!length(results)) stop("All series failed: read the FAILED messages above")
+kable(rbindlist(timing), caption = "Run time per series")
+```
+
+# 8. Results
+
+```{r metrics}
+met_all <- rbindlist(lapply(names(results), function(k) {
+  m <- copy(results[[k]]$met); m[, `:=`(zone = sub(" .*", "", k), load_type = sub("^[^ ]+ ", "", k))]; m
+}))
+setcolorder(met_all, c("zone", "load_type", "model", "split"))
+kable(met_all[order(load_type, zone, split, model)][, lapply(.SD, function(x) if (is.numeric(x)) round(x, 2) else x)],
+      caption = "ASHRAE 14 metrics per series, model and period (same hours for both models)")
+```
+
+```{r best}
+b <- dcast(met_all, zone + load_type + split ~ model, value.var = "CV_RMSE")
+kable(b[, .(zone, load_type, split, naive_CV = round(SeasonalNaive, 1), lgb_CV = round(LightGBM, 1),
+            LightGBM_beats_naive = LightGBM < SeasonalNaive)][order(split, load_type, zone)],
+      caption = "CV(RMSE) %: LightGBM against the baseline")
+cat("Series passing ASHRAE 14 (LightGBM):\n")
+print(met_all[model == "LightGBM", .(passing = sum(ASHRAE_pass, na.rm = TRUE), total = .N), by = split])
+```
+
+```{r plot_cv}
+ggplot(met_all[!is.na(CV_RMSE)], aes(paste(zone, load_type), CV_RMSE, fill = model)) +
+  geom_col(position = "dodge") + facet_wrap(~split) + coord_flip() +
+  geom_hline(yintercept = 30, linetype = 2) +
+  labs(x = NULL, y = "CV(RMSE) %", title = "Day-ahead CV(RMSE) by series (dashed line = ASHRAE 14 limit, 30 %)")
+```
+
+```{r importance}
+imp_all <- rbindlist(lapply(names(results), function(k) cbind(series = k, results[[k]]$imp)))
+kable(imp_all[, .SD[1:5], by = series][, .(series, Feature, Gain_pct = round(100 * Gain, 1))],
+      caption = "Top-5 LightGBM features by gain (input for T33 / SHAP)")
+```
+
+# 9. Save outputs
+
+```{r save}
+# (a) predictions in the team format: timestamp_utc, zone, load_type, model, split, y_true, y_pred
+pred_all <- rbindlist(lapply(names(results), function(k) {
+  e <- results[[k]]$ev; z <- sub(" .*", "", k); l <- sub("^[^ ]+ ", "", k)
+  rbind(e[!is.na(naive), .(timestamp_utc = format(ts, "%Y-%m-%d %H:%M:%S"), zone = z, load_type = l,
+                           model = "SeasonalNaive", split, y_true = y, y_pred = naive)],
+        e[, .(timestamp_utc = format(ts, "%Y-%m-%d %H:%M:%S"), zone = z, load_type = l,
+              model = "LightGBM", split, y_true = y, y_pred = lgb)])
+}))
+fwrite(pred_all, file.path(CFG$out_dir, "T29_dayahead_predictions.csv"))
+
+# (b) file read by the T30 script (zone_load_forecasts_T29.csv): LightGBM forecasts only
+fwrite(pred_all[model == "LightGBM", .(timestamp = timestamp_utc, zone, load_type, forecast_wh = y_pred)],
+       file.path(CFG$out_dir, "zone_load_forecasts_T29.csv"))
+
+# (c) metrics, importance and best parameters
+fwrite(met_all, file.path(CFG$out_dir, "T29_metrics_ashrae.csv"))
+fwrite(imp_all, file.path(CFG$out_dir, "T29_lgb_importance.csv"))
+par_tab <- rbindlist(lapply(names(results), function(k) {
+  r <- results[[k]]
+  data.table(series = k, as.data.table(r$par), best_iteration = r$iter,
+             n_features = r$n_feats, valid_rmse = round(r$valid_rmse, 2))
+}))
+fwrite(par_tab, file.path(CFG$out_dir, "T29_best_params.csv"))
+kable(par_tab, caption = "Best LightGBM configuration per series")
+
+# (d) rows for experiment_log.xlsx (columns agreed in T20): paste them into the log
+rng <- function(sp) {
+  d <- pred_all[split == sp, as.Date(timestamp_utc)]
+  if (!length(d)) NA_character_ else paste(format(min(d)), "to", format(max(d)))
+}
+test_period <- vapply(CFG$eval_splits, rng, character(1))
+log_rows <- met_all[order(zone, load_type, match(split, CFG$eval_splits), model), .(
+  ID = sprintf("T29-%03d", .I), date = format(Sys.Date()), author = CFG$author,
+  series = paste(zone, load_type),
+  features = ifelse(model == "SeasonalNaive", "lag_168",
+                    "calendar, target lags >= 24 h, mean previous day, same-hour mean 7 d, indoor lag 24 h"),
+  model = ifelse(model == "SeasonalNaive", "Seasonal naive (same hour last week)", "LightGBM (tuned, 6 configs)"),
+  `train period` = "2020-06-01 to 2022-06-30",
+  `test period` = paste0(split, ": ", test_period[split]),
+  MAE = round(MAE, 1), RMSE = round(RMSE, 1), `CV(RMSE)` = round(CV_RMSE, 2), NMBE = round(NMBE, 2),
+  notes = sprintf("T29 day-ahead; n=%d h; ASHRAE14 %s; NMBE>0 = over-forecast", n, ifelse(ASHRAE_pass, "PASS", "FAIL")))]
+fwrite(log_rows, file.path(CFG$out_dir, "T29_experiment_log_rows.csv"))
+if (length(failed)) cat("Series that failed:", paste(failed, collapse = ", "), "\n")
+cat("Files written to", normalizePath(CFG$out_dir), ":\n"); print(list.files(CFG$out_dir))
+```
+
+```{r session}
+sessionInfo()
+```
