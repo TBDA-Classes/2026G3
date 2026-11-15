@@ -1,0 +1,4 @@
+load_type,series,selected_model,validation_CV_RMSE_pct,validation_NMBE_pct,top_driver_1,top_driver_2,top_driver_3,interpretation
+HVAC,NE HVAC,GBM,243.04,4.05,roll_mean_24,energy_lag_24,hour_local,Primarily autoregressive; indoor environmental sensors unavailable in NE
+Plugs & Sockets,NW Plugs & Sockets,GBM,42.63,1.12,roll_mean_24,temp_lag2,energy_lag_24,Autoregressive with additional temperature and luminosity effects
+Lighting,SW Lighting,random_forest_no2020,323.35,41.07,occupancy,lag_24h,lag_168h,Occupancy and prior-use patterns dominate; luminosity also important
