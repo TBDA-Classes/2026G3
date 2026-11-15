@@ -239,7 +239,25 @@ These results are preliminary (quick mode) and should be repeated with the full 
 | **Extras** | • Task executed by María Herraiz . Covers backlog item **F1.2**, T29 |
 
 
-### Entry 13 — 06/11/2026
+---
+
+### Entry 13 — 02/11/2026
+
+| Field | Content |
+|---|---|
+| **Date** | 02/11/2026 |
+| **Dataset version** | v0.4 (`cedint_f1_hourly_clean.csv.gz`) → model-ready file `cedint_f1_model_ready.csv.gz` (`T32_cedint_f1_model_ready.csv.gz` in the repository) |
+| **Cleaning steps** | • Nothing deleted: all 470,680 hourly rows of the clean dataset are kept in the output file.<br>• Three 0/1 columns say how an hour may be used: `include_train` (the model may learn from it), `include_eval` (validation and test scores are computed on it) and `include_train_no2020` (experiment variant without the COVID year 2020); `exclusion_reason` records the first rule that keeps a row out.<br>• Split assigned by date (train / validation / test_2023 / test_2025 / unused); SW in 2025 set to unused.<br>• Model scope per series: priority (HVAC, Lighting, Plugs & Sockets), secondary constant (RACK, Emergency Lighting), daily totals only (Hand Dryer), excluded (SE Projector).<br>• Calendar features from local time (`hour_local`, `dayofweek_local`, `month_local`); target lags `lag_24h` and `lag_168h` computed per series and per period, never across the 902-day gap.<br>• Training filtered more strictly than evaluation: test hours are only dropped when no true value exists. |
+| **Model tested** | N/A (Data Preparation – model-ready training data, T32) |
+| **Parameters tested** | • Periods (UTC), agreed with Team D: train 1 Jun 2020 – 30 Jun 2022; validation 1 Jul – 31 Dec 2022; test_2023 1 Jan – 28 Feb 2023; test_2025 18 Aug – 13 Oct 2025 (NE, NW, SE only).<br>• Exclusion rules for training and evaluation: R0 outside the agreed periods; R1 dead series or rated "Do not use"; R2 no valid energy value; R3 interpolated value; R4 event-driven load (hand dryers).<br>• Exclusion rules for training only: R5 counter energy and power × 1 h differ by more than 20 %; R6 isolated power spike (Hampel filter).<br>• Variant V1: training without 2020 (`include_train_no2020`). |
+| **Results obtained** | • Rows used: train 229,086 (157,319 without 2020); validation 52,566; test_2023 17,185; test_2025 13,470.<br>• Training hours left out: R1 18,240; R2 21,399; R3 12,136; R4 32,203; R5 9,087; R6 1,147. R0 leaves out 30,805 hours of the whole file.<br>• Every series keeps at least 69 % of its training hours (from 69 % for SW Lighting to 100 % for NW RACK). |
+| **Interpretation** | • One model-ready file means every model learns from and is scored on the same hours, so the scores are comparable.<br>• Leaving doubtful hours out of training helps the model learn normal behaviour; keeping them in the test keeps the scores honest.<br>• 2020 stays in the main training set because the data shows no single direction: working-day occupancy was lower than in 2021 in NW (46 % vs 51 %) and SW (12 % vs 59 %) but higher in SE (79 % vs 36 %), and the change from 2021 to 2022 is just as large. Dropping 2020 removes about a third of the training hours, so each model is trained with and without 2020 and the version with the better validation score is kept. |
+| **Issued found** | • test_2023 covers only two winter months; test_2025 covers only late summer and autumn.<br>• For SW, 20–31 % of training hours are left out; SW forecasts should state this.<br>• R5 uses a 20 % tolerance; another value would change the training set slightly.<br>• Environmental features are empty for NE (no sensors) and in about 2 % of other hours; `current_a` is not included because it is underestimated for multi-device series in 2020–23. |
+| **Extras** | • Task executed by Marie Heyse (Team B – Data Quality & Validation). Script: `T32_make_training_data.py`. Documentation: `T32_TRAINING_DATA_METHODOLOGY.md`, `README_T32_datacleaning.md`. Summary: `training_data_summary_T32_DATACLEANING.xlsx`.<br>• Supports T29 (F1.2), T32 (F6.3) and T34–T40 (evaluation). |
+
+---
+
+### Entry 14 — 06/11/2026
 
 | Field | Content |
 |---|---|
@@ -255,7 +273,7 @@ These results are preliminary (quick mode) and should be repeated with the full 
 
 ---
 
-### Entry 14 — 10/11/2026
+### Entry 15 — 10/11/2026
 
 | Field | Content |
 |---|---|
@@ -271,7 +289,7 @@ These results are preliminary (quick mode) and should be repeated with the full 
 
 ---
 
-### Entry 15 — 11/11/2026
+### Entry 16 — 11/11/2026
 
 | Field | Content |
 |---|---|
@@ -287,7 +305,7 @@ These results are preliminary (quick mode) and should be repeated with the full 
 
 ---
 
-### Entry 16 — 13/11/2026
+### Entry 17 — 13/11/2026
 
 | Field | Content |
 |---|---|
@@ -304,7 +322,7 @@ These results are preliminary (quick mode) and should be repeated with the full 
 
 ---
 
-### Entry 17 — 14/11/2026
+### Entry 18 — 14/11/2026
 
 | Field | Content |
 |---|---|
@@ -344,7 +362,7 @@ These results are preliminary (quick mode) and should be repeated with the full 
 
 
 
-### Entry 18 — 14/11/2026
+### Entry 19 — 14/11/2026
 
 | Field | Content |
 |---|---|
@@ -361,3 +379,18 @@ These results are preliminary (quick mode) and should be repeated with the full 
 | **Issued found** | • SW has no 2025 data, so it is evaluated on 2023 only; NE has no Lighting and SW no HVAC.• Test periods are short (2023: Jan–Feb; 2025: 18 Aug – 13 Oct).• Validation metrics are slightly optimistic: validation is used for early stopping and for choosing the configuration. Only the test results are out-of-sample.• Strong bias in Lighting forecasts (see Interpretation); possible level shifts or changes in use between periods still to be checked.• `zone_load_forecasts_T29.csv` covers only the 10 core series. |
 | **Extras** | • Task executed by María Herraiz. Covers backlog item **F1.2**, T29.|
 
+### Entry 20 — 14/11/2026
+
+| Field | Content |
+|---|---|
+| **Date** | 14/11/2026 |
+| **Dataset version** | v0.4 (`cedint_f1_hourly_clean.csv.gz`, used as the reference for `y_true`) + forecasts of all subteam D models in the agreed format (`timestamp_utc, zone, load_type, model, split, y_true, y_pred`) |
+| **Cleaning steps** | • All predictions files (also inside the zips) merged into one file with `T36_combine_predictions.py`: the same split names set by date for every model, training rows dropped, duplicates removed.<br>• Timestamps checked against the clean dataset: `y_true` matches `energy_wh_model` in 100 % of rows for every model except GBM.<br>• `All_Zones_GBM_predictions.csv` stores Madrid local time in the column `timestamp_utc` (95 % of rows do not match as UTC, 0 % mismatch as local time): converted to UTC automatically. GBM also labels the whole out-of-sample period `test`: re-labelled by date (validation / test_2023 / test_2025). |
+| **Model tested** | N/A (Evaluation of all forecasts – T28, T34, T35, preparation of T38 and T40).<br>10 models, 763,171 forecast hours: Chronos (`chronos_bolt_base`), CatBoost and CatBoost without 2020, Random Forest and Random Forest without 2020, GBM, LightGBM, seasonal naive, plus the reference benchmarks `naive_day` (same hour yesterday) and `naive_week` (same hour last week). |
+| **Parameters tested** | • Best model per series chosen on the validation period only, on the hours that every model forecast (lowest CV(RMSE)); then scored on test_2023 and test_2025 against `naive_day` on the same hours (`TeamB_select_best_model.py`).<br>• ASHRAE Guideline 14 hourly criteria: CV(RMSE) ≤ 30 % and \|NMBE\| ≤ 10 %.<br>• T34: error = MAE as % of the series mean, by hour of day, day type, season and zone / load type.<br>• T35: days and hours where the best model is far off compared with its normal error (robust z-score), at most 3 per series, each with a first explanation from the calendar and the quality flags.<br>• T40: scores with and without flagged hours. |
+| **Results obtained** | • Best model: Chronos for 8 series, GBM for 5, Random Forest without 2020 for 1 (SW Lighting).<br>• The best model beats the benchmark in 14 of 14 series on validation and on test 2023, and in 9 of 11 on test 2025 (exceptions: NE and NW Plugs & Sockets).<br>• ASHRAE 14 met by 6 of 14 series on validation, 7 of 14 on test 2023 and 5 of 11 on test 2025.<br>• T34 (best model, priority series, validation): lowest error at night (17–22 % from 00 to 06 h), highest at 07–09 h (29–30 %) and at 17 h (34 %); weekend 20 %, working day 26 %, holiday 29 %; Lighting hardest (SE 82 %, SW 110 % of the mean), HVAC 14–27 %, Plugs & Sockets 5–24 %, constant loads 0–6 %.<br>• T35: 17 anomaly days, e.g. NE HVAC on 3, 17 and 20 Feb 2023 (quality flags in 33–42 % of hours), SE Lighting on 22 and 29 Aug and 28 Sep 2025 (lighting on during August low use and on a Sunday), SE Plugs & Sockets on 1 Dec 2022 and 30 Jan 2023 (no context found).<br>• T40: removing flagged hours changes NE HVAC validation from 243 % to 12 %, SE Plugs & Sockets from 119 % to 60 % and SE HVAC from 51 % to 28 %; SE and SW Lighting get worse without flagged hours.<br>• T28 (F2.2) closed: NW RACK 0.7 % / 0.5 % / 3.6 % (validation / 2023 / 2025); emergency lighting 2.9–8.6 % on validation; NW Emergency Lighting 2025 34 %, 4.3 % without flagged hours; SW RACK ends in Dec 2021 and is not forecast; hand dryers are not forecastable per hour. |
+| **Interpretation** | • No single model wins everywhere, so the dashboard and the report use the best model per series.<br>• The variant without 2020 was only chosen for SW Lighting; for the other series the full training set (with 2020) scored better.<br>• The models know the daily pattern but not the exact moment devices switch on and off.<br>• For NE HVAC, SE Plugs & Sockets and SE HVAC the large errors come from meter problems, not from the model; for SE and SW Lighting the problem is the series itself (rare, large switch-on events).<br>• The constant loads are easy to forecast, but even the benchmark is already within ASHRAE (0.9–12 %), so the forecasting effort belongs to HVAC, Lighting and Plugs & Sockets. |
+| **Issued found** | • GBM timestamps stored in local time and the whole out-of-sample period labelled `test`; fixed in `T36_combine_predictions.py`.<br>• 5–10 rows around the October clock change still do not match the clean dataset (negligible).<br>• Lighting shows a strong under-forecast bias (41–60 %).<br>• In 2025, NE and NW Plugs & Sockets are so stable that "same hour yesterday" is hard to beat. |
+| **Extras** | • Task executed by Marie Heyse (Team B – Data Quality & Validation). Summary: `TeamB_Sprint3_results.md`. Files: `best_model_selection.csv`, `TeamB_evaluation_best_model.xlsx`, `TeamB_evaluation_all_models.xlsx`, figures `F13_best_model_vs_benchmark.png` and `F11_error_by_hour_best_model.png`. Code: `T36_combine_predictions.py`, `TeamB_select_best_model.py`, `team_b_eval.py`.<br>• Covers backlog items T28 (F2.2), T34 (F6.6) and T35 (F7.1); ready for T38 (F6.4, sheet *ASHRAE_table*) and T40 (F6.7, sheet *Sensitivity_flags*). |
+
+---
