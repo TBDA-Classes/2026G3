@@ -217,12 +217,14 @@ with tab_fc:
             pdf = load_pred(src)
         except Exception as e:
             st.error(str(e)); st.stop()
-        if up is None:
+        if up is None and set(pdf["model"].unique()) <= {"naive_day", "naive_week"}:
             st.caption("Showing the reference forecasts (naive_day = same hour yesterday, naive_week = same hour last week). "
                        "These are the bar every real model must beat.")
         a, b, c = st.columns(3)
         model = a.selectbox("Model", sorted(pdf["model"].unique()))
-        split = b.selectbox("Period", [x for x in ["validation", "test_2023", "test_2025", "train"] if x in pdf["split"].unique()])
+        known = ["validation", "test_2023", "test_2025", "train"]
+        split = b.selectbox("Period", [x for x in known if x in pdf["split"].unique()] +
+                            sorted(set(pdf["split"].unique()) - set(known)))
         pm = pdf[(pdf["model"] == model) & (pdf["split"] == split)].copy()
         pm["series"] = pm["zone"] + " · " + pm["load_type"]
         sopts = sorted(pm["series"].unique())
@@ -247,6 +249,34 @@ with tab_fc:
             fig.update_layout(title=f"{s} · one week (UTC)", height=380, yaxis_title="Energy per hour (Wh)",
                               hovermode="x unified", legend=dict(orientation="h", y=1.1), **TEMPLATE)
             st.plotly_chart(fig, use_container_width=True)
+
+        # compare every model on the same series and period, on the hours that ALL models forecast
+        if pdf["model"].nunique() > 1:
+            st.subheader(f"Model comparison · {s} · {split}")
+            sp = pdf[(pdf["split"] == split) & (pdf["zone"] + " · " + pdf["load_type"] == s)]
+            common = sp.groupby("timestamp_utc")["model"].nunique()
+            common = common[common == sp["model"].nunique()].index
+            same_hours = st.checkbox("Only hours that every model forecast (fair comparison)", value=len(common) > 0)
+            if same_hours:
+                sp = sp[sp["timestamp_utc"].isin(common)]
+            cmp_rows = []
+            for mod, g in sp.groupby("model"):
+                r = metrics(g["y_true"], g["y_pred"]); r.update(model=mod); cmp_rows.append(r)
+            cmp = pd.DataFrame(cmp_rows).sort_values("CV_RMSE")
+            cmp["ASHRAE 14"] = np.where((cmp["CV_RMSE"] <= 30) & (cmp["NMBE"].abs() <= 10), "✓ pass", "✕ fail")
+            fig = go.Figure(go.Bar(x=cmp["CV_RMSE"], y=cmp["model"], orientation="h",
+                                   marker_color=np.where(cmp["model"].str.startswith("naive"), "#898781", "#2a78d6"),
+                                   text=[f"{v:.1f} %" for v in cmp["CV_RMSE"]], textposition="outside",
+                                   hovertemplate="%{y}: CV(RMSE) %{x:.1f} %<extra></extra>"))
+            fig.add_vline(x=30, line_dash="dot", line_color="#d03b3b", annotation_text="ASHRAE 30 %", annotation_position="top")
+            fig.update_layout(height=60 + 38 * len(cmp), xaxis_title="CV(RMSE) % (lower is better)", xaxis_range=[0, max(cmp["CV_RMSE"].max(), 30) * 1.15],
+                              yaxis=dict(autorange="reversed"), margin=dict(t=40), **TEMPLATE)
+            st.plotly_chart(fig, use_container_width=True)
+            st.dataframe(cmp[["model", "n", "CV_RMSE", "NMBE", "MAE", "ASHRAE 14"]]
+                         .rename(columns={"CV_RMSE": "CV(RMSE) %", "NMBE": "NMBE %", "MAE": "MAE (Wh)", "n": "hours"})
+                         .style.format({"CV(RMSE) %": "{:.1f}", "NMBE %": "{:+.1f}", "MAE (Wh)": "{:,.1f}"}),
+                         use_container_width=True, hide_index=True)
+            st.caption("Grey bars are the benchmarks (same hour yesterday / last week). A model is useful when it beats them.")
 
         rows = []
         for (z, l), g in pm.groupby(["zone", "load_type"]):

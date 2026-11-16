@@ -6,3 +6,4 @@ matplotlib>=3.7
 holidays>=0.40
 streamlit>=1.40
 plotly>=5.20
+scipy

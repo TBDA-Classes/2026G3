@@ -1,0 +1,15 @@
+zone,load_type,best_model,n_models,val_hours,val_cv_best,val_nmbe_best,val_cv_naive_day,test_2023_cv_best,test_2023_nmbe_best,test_2023_cv_naive_day,test_2025_cv_best,test_2025_nmbe_best,test_2025_cv_naive_day,val_beats_naive,val_ashrae_pass,test_2023_beats_naive,test_2023_ashrae_pass,test_2025_beats_naive,test_2025_ashrae_pass
+NE,HVAC,gbm,7,3870,243.08,4.05,344.53,688.49,58.17,973.42,14.96,-0.75,22.4,True,False,True,False,True,True
+NE,Plugs & Sockets,gbm,7,3870,13.21,1.6,26.63,19.05,-7.19,26.3,7.69,0.84,6.42,True,True,True,True,False,True
+NW,Emerg. Lighting,chronos_bolt_base,5,3683,2.9,-0.19,3.61,5.31,0.82,12.31,34.31,3.66,47.73,True,True,True,True,True,False
+NW,HVAC,gbm,7,3663,51.64,1.55,76.12,29.64,4.3,48.34,85.73,0.68,109.74,True,False,True,True,True,False
+NW,Lighting,chronos_bolt_base,7,3870,72.57,2.2,109.5,62.26,9.09,100.84,90.53,11.41,108.99,True,False,True,False,True,False
+NW,Plugs & Sockets,gbm,7,3870,42.73,1.15,71.24,40.39,1.5,66.5,52.26,-8.33,45.55,True,False,True,False,False,False
+NW,RACK,chronos_bolt_base,5,3890,0.66,-0.0,0.9,0.51,-0.0,0.83,3.56,-0.55,5.02,True,True,True,True,True,True
+SE,Emerg. Lighting,chronos_bolt_base,5,3313,8.55,-1.11,12.43,12.44,-1.24,19.13,13.97,-0.49,21.05,True,True,True,True,True,True
+SE,HVAC,chronos_bolt_base,7,2312,50.69,6.55,69.29,39.99,3.75,57.09,34.67,-1.9,44.97,True,False,True,False,True,False
+SE,Lighting,gbm,7,2330,321.92,60.48,481.01,204.25,58.9,253.08,284.03,81.13,288.23,True,False,True,False,True,False
+SE,Plugs & Sockets,chronos_bolt_base,7,2989,86.34,5.89,92.28,123.24,13.34,167.71,29.22,-1.22,39.69,True,False,True,False,True,True
+SW,Emerg. Lighting,chronos_bolt_base,5,2728,5.97,-0.5,8.8,10.52,0.06,11.11,,,,True,True,True,True,,
+SW,Lighting,random_forest_no2020,7,1576,432.96,-14.2,734.15,208.89,54.09,251.8,,,,True,False,True,False,,
+SW,Plugs & Sockets,chronos_bolt_base,7,1708,10.54,-0.65,17.25,17.53,1.2,28.52,,,,True,True,True,True,,
