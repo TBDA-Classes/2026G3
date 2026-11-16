@@ -14,7 +14,7 @@ This repository turns the raw CeDInt floor‑1 sensor exports into one clean, ho
 | `make_reference_baseline.py` | Naive reference forecasts (same hour yesterday / last week) in the agreed prediction format |
 | `secondary_loads.py` | Characterisation of emergency lighting, hand dryers and RACK (backlog F2.2) |
 | `make_training_data.py` | Model-ready training data: decides per hour whether it may be used for training or scoring, with the reason (see `TRAINING_DATA_METHODOLOGY.md`) |
-| `dashboard_app.py` | Dashboard prototype (T36 / F8.1, Streamlit): overview, consumption, drivers, forecast vs actual (ASHRAE 14) and data quality. Works without models via the reference forecasts; Team D's predictions can be uploaded |
+| `dashboard_app.py` | Dashboard prototype (T36 / F8.1, Streamlit): overview, consumption, drivers, forecast vs actual (ASHRAE 14) and data quality. Works without models via the reference forecasts; predictions can be uploaded |
 | `requirements.txt` | Python packages needed |
 | `figures/` | Figures F1–F10 (PNG) |
 | `CeDInt_F1_quality_and_anomalies.xlsx` | Quality and anomaly results (optional; the pipeline regenerates it) |
