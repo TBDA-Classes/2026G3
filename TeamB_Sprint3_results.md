@@ -1,7 +1,7 @@
 # Team B – Sprint 3 results (T28, T34, T35)
 
-**Author:** Marie Heyse (Team B – Data Quality & Validation) · **Date:** 14 November 2026
-**Input:** all subteam D forecasts on GitHub (Chronos, CatBoost, Random Forest with and without 2020, GBM, LightGBM, seasonal naive) plus the reference benchmarks (naive_day, naive_week): 10 models, 763,171 forecast hours.
+**Author:** Marie Heyse – Data Quality & Validation · **Date:** 14 November 2026
+**Input:** all forecasts on GitHub (Chronos, CatBoost, Random Forest with and without 2020, GBM, LightGBM, seasonal naive) plus the reference benchmarks (naive_day, naive_week): 10 models, 763,171 forecast hours.
 
 | Script | What it does |
 | --- | --- |
@@ -9,7 +9,7 @@
 | `TeamB_select_best_model.py` | Chooses the best model per series **on the validation period only** (same hours for every model), then reports its test scores |
 | `team_b_eval.py` | ASHRAE 14 table, error breakdown, anomaly candidates and sensitivity to quality flags |
 
-## 0. Data check before the evaluation (important for subteam D)
+## 0. Data check before the evaluation (important for modelling&forecasting)
 
 - All files are in the agreed format and `y_true` matches the clean dataset (v0.4) in 100 % of rows, **except GBM**.
 - `All_Zones_GBM_predictions.csv` stores **local (Madrid) time** in the column `timestamp_utc`: 95 % of rows do not match as UTC, 0 % mismatch as local time. The scores of GBM itself are correct, but it was shifted 1–2 hours against the other models and against the calendar. `T36_combine_predictions.py` now converts it to UTC automatically.
