@@ -1,0 +1,15 @@
+zone,load_type,best_model,n_models,val_hours,val_cv_best,val_nmbe_best,val_cv_naive_day,test_2023_cv_best,test_2023_nmbe_best,test_2023_cv_naive_day,test_2025_cv_best,test_2025_nmbe_best,test_2025_cv_naive_day,val_beats_naive,val_ashrae_pass,test_2023_beats_naive,test_2023_ashrae_pass,test_2025_beats_naive,test_2025_ashrae_pass
+NE,HVAC,gbm,10,3730,248.14,4.18,351.69,688.49,58.17,973.42,14.96,-0.75,22.4,True,False,True,False,True,True
+NE,Plugs & Sockets,gbm,10,3730,13.57,1.55,27.41,19.05,-7.19,26.3,7.69,0.84,6.42,True,True,True,True,False,True
+NW,Emerg. Lighting,chronos_bolt_base,5,3523,2.83,-0.17,3.5,5.31,0.82,12.31,34.5,4.12,48.24,True,True,True,True,True,False
+NW,HVAC,hybrid_chronos_gbm_learned_weights,10,3523,51.21,-2.45,75.55,29.34,2.89,48.34,84.6,-1.04,110.39,True,False,True,True,True,False
+NW,Lighting,hybrid_chronos_gbm_learned_weights,10,3730,68.39,-5.09,111.08,63.24,5.95,101.33,89.83,-6.84,108.39,True,False,True,False,True,False
+NW,Plugs & Sockets,gbm,10,3730,40.86,0.51,67.74,40.39,1.5,66.5,52.26,-8.33,45.55,True,False,True,False,False,False
+NW,RACK,chronos_bolt_base,5,3730,0.59,0.0,0.77,0.51,-0.0,0.83,2.97,-0.41,4.2,True,True,True,True,True,True
+SE,Emerg. Lighting,chronos_bolt_base,5,548,5.37,-1.24,8.46,11.64,-1.82,19.18,12.14,-0.4,16.37,True,True,True,True,True,True
+SE,HVAC,hybrid_chronos_gbm_learned_weights,10,379,73.38,-4.78,85.08,42.73,-2.24,64.67,33.89,4.02,43.66,True,False,True,False,True,False
+SE,Lighting,gbm,10,576,838.13,6.03,9318.69,204.25,58.9,253.08,284.03,81.13,288.23,True,False,True,False,True,False
+SE,Plugs & Sockets,hybrid_chronos_gbm_learned_weights,10,1615,23.67,-0.28,33.49,114.5,3.75,154.35,33.91,-18.93,40.91,True,True,True,False,True,False
+SW,Emerg. Lighting,chronos_bolt_base,5,223,2.77,-0.29,4.09,2.49,-0.05,3.79,,,,True,True,True,True,,
+SW,Lighting,hybrid_chronos_gbm_learned_weights,10,91,448.35,32.2,274.91,293.18,22.76,705.39,,,,False,False,True,False,,
+SW,Plugs & Sockets,chronos_bolt_base,10,353,9.46,0.38,13.03,11.48,-0.24,20.42,,,,True,True,True,True,,
