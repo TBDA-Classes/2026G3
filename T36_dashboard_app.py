@@ -17,6 +17,10 @@ import streamlit as st
 p = argparse.ArgumentParser()
 p.add_argument("--data", default=".", help="folder containing cleaned dataset")
 p.add_argument("--pred", default="reference_baseline_predictions.csv.gz", help="predictions file (agreed format)")
+p.add_argument("--eval", default="TeamB_T38_final_evaluation.xlsx", help="T38 workbook (best-model scorecard)")
+p.add_argument("--bias", default="TeamB_T40_robustness_bias.xlsx", help="T40 workbook (bias and robustness)")
+p.add_argument("--total", default=os.path.join("outputs_T30", "T30_floor1_total_forecast_hourly.csv"),
+               help="T30 floor-1 total forecast (hourly)")
 args, _ = p.parse_known_args(sys.argv[1:])
 
 ZONE_COLOR = {"NE": "#0284C7", "NW": "#EA580C", "SE": "#0D9488", "SW": "#4F46E5"}
@@ -224,8 +228,8 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-tab_over, tab_cons, tab_drv, tab_fc, tab_q = st.tabs(
-    ["Overview", "Consumption", "Drivers", "Forecast vs actual", "Data quality"])
+tab_over, tab_cons, tab_drv, tab_fc, tab_best, tab_tot, tab_q = st.tabs(
+    ["Overview", "Consumption", "Drivers", "Forecast vs actual", "Best model scorecard", "Floor-1 total", "Data quality"])
 
 # ------------------------------------------------------------------ 1 overview
 with tab_over:
@@ -517,3 +521,175 @@ with tab_q:
         if issues is not None:
             st.subheader("Known sensor and meter problems")
             st.dataframe(issues, use_container_width=True, hide_index=True)
+
+# ------------------------------------------------------------------ 6 best model scorecard (T38 + T40, Marie Heyse)
+SHORT_MODEL = {"chronos_bolt_base": "Chronos", "gbm": "GBM", "hybrid_chronos_gbm_learned_weights": "Hybrid (Chronos+GBM)",
+               "random_forest_no2020": "Random forest (no 2020)", "random_forest": "Random forest",
+               "catboost": "CatBoost", "catboost_no2020": "CatBoost (no 2020)", "lightgbm": "LightGBM"}
+SPLIT_NAME = {"validation": "Validation 2022-H2", "test_2023": "Test Jan–Feb 2023", "test_2025": "Test Aug–Oct 2025"}
+
+
+@st.cache_data(show_spinner=False)
+def load_book(path):
+    return pd.read_excel(path, sheet_name=None) if os.path.exists(path) else None
+
+
+def find(path):
+    for cand in [path, os.path.join(args.data, path), os.path.join(args.data, os.path.basename(path))]:
+        if os.path.exists(cand):
+            return cand
+    return path
+
+
+with tab_best:
+    book = load_book(find(args.eval))
+    if book is None:
+        st.info("T38 workbook not found. Run TeamB_T38_final_evaluation.py, or pass --eval <file>.")
+    else:
+        ft = book["Final_table"].copy()
+        ft["series"] = ft["zone"] + " · " + ft["load_type"]
+        ft["model"] = ft["best_model"].map(lambda m: SHORT_MODEL.get(m, m))
+        sp_opts = [x for x in SPLIT_NAME if x in ft["split"].unique()]
+        sp = st.radio("Period", sp_opts, format_func=SPLIT_NAME.get, horizontal=True, key="best_split")
+        f = ft[ft["split"] == sp]
+        on_t = f["target"].astype(str).str.startswith("on target").sum()
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Series forecast", f"{len(f)}")
+        c2.metric("Better than naive", f"{int((f['skill'] > 0).sum())} of {len(f)}",
+                  help="Skill > 0: lower RMSE than 'same hour yesterday' on the same hours.")
+        c3.metric("Median skill", f"{f['skill'].median():+.2f}")
+        c4.metric("Meets load target", f"{on_t} of {len(f)}",
+                  help="Constant loads ≤ 15 %, Plugs ≤ 30 %, HVAC 30–50 % and beats naive with |NMBE| ≤ 10 %, "
+                       "Lighting judged on daily energy and switch-on timing.")
+
+        st.markdown("""<div class="decision-box"><h4>How the model was chosen</h4>
+        <p>Per series, the candidate with the lowest CV(RMSE) on <b>16 Oct – 31 Dec 2022</b> wins. That window is
+        out-of-sample for every model, including the hybrid, which learned its weights on 1 Jul – 15 Oct.
+        The choice is then frozen and scored on both test periods. Naive forecasts are benchmarks, never candidates.</p></div>""",
+                    unsafe_allow_html=True)
+
+        left, right = st.columns([1.15, 1])
+        fs = f.sort_values("skill")
+        fig = go.Figure(go.Bar(x=fs["skill"], y=fs["series"] + "  (" + fs["model"] + ")", orientation="h",
+                               marker_color=np.where(fs["skill"] > 0, "#0F766E", "#E11D48"),
+                               text=fs["skill"].map(lambda v: f"{v:+.2f}"), textposition="outside",
+                               hovertemplate="%{y}<br>skill %{x:+.2f}<extra></extra>"))
+        fig.add_vline(x=0, line_color="#64748B")
+        fig.update_layout(title="Skill vs naive (right of 0 = better than yesterday's value)", height=90 + 30 * len(fs),
+                          xaxis_title="Skill score", margin=dict(l=10, r=40),
+                          xaxis_range=[min(fs["skill"].min() * 1.3, -0.05), fs["skill"].max() * 1.25], **TEMPLATE)
+        left.plotly_chart(fig, use_container_width=True)
+
+        wins = ft[ft["split"] == "validation"]["model"].value_counts().reset_index()
+        wins.columns = ["model", "series"]
+        fig = px.bar(wins, x="series", y="model", orientation="h", text="series",
+                     labels={"series": "Series won", "model": ""}, color_discrete_sequence=["#0284C7"])
+        fig.update_layout(title="Which model wins how many series", height=280, yaxis=dict(autorange="reversed"), **TEMPLATE)
+        right.plotly_chart(fig, use_container_width=True)
+        if "Model_choice" in book:
+            mc = book["Model_choice"]
+            right.caption(f"Model choice made on {int(mc['selection_hours'].median())} hours per series (median).")
+
+        show = f[["series", "model", "CV", "naive_CV", "skill", "NMBE", "MAE_kWh_per_h", "daily_CV", "daily_MAE_kWh",
+                  "switch_on_error_h", "target"]].rename(columns={
+            "model": "chosen model", "CV": "CV(RMSE) %", "naive_CV": "naive CV %", "NMBE": "NMBE %",
+            "MAE_kWh_per_h": "MAE kWh/h", "daily_CV": "daily CV %", "daily_MAE_kWh": "daily MAE kWh",
+            "switch_on_error_h": "switch-on error h"})
+        st.dataframe(show.style.format({"CV(RMSE) %": "{:.1f}", "naive CV %": "{:.1f}", "skill": "{:+.2f}",
+                                        "NMBE %": "{:+.1f}", "MAE kWh/h": "{:.3f}", "daily CV %": "{:.1f}",
+                                        "daily MAE kWh": "{:.2f}", "switch-on error h": "{:.1f}"}, na_rep="—"),
+                     use_container_width=True, hide_index=True)
+        st.caption("NMBE = (actual − forecast) / mean actual: positive means the forecast is too low. "
+                   "ASHRAE Guideline 14 limits (30 % hourly, ±10 % bias) are shown in the T38 workbook as a reference only.")
+
+        bias = load_book(find(args.bias))
+        if bias is not None:
+            st.subheader("Why some forecasts are biased, and what fixes it (T40)")
+            rc = bias["Recalibration"]
+            rc = rc[(rc["split"] == sp) & (rc["NMBE_before"].abs() > 10)].copy()
+            sn = bias["Sensitivity_flags"]
+            sn = sn[sn["split"] == sp]
+            a, b = st.columns(2)
+            if rc.empty:
+                a.success("No series has a bias above ±10 % in this period.")
+            else:
+                rc["series"] = rc["zone"] + " · " + rc["load_type"]
+                fig = go.Figure()
+                fig.add_vrect(x0=-10, x1=10, fillcolor="#E2E8F0", opacity=0.5, line_width=0)
+                fig.add_trace(go.Scatter(x=rc["NMBE_before"], y=rc["series"], mode="markers", name="chosen model",
+                                         marker=dict(size=12, color="#E11D48")))
+                fig.add_trace(go.Scatter(x=rc["NMBE_after"], y=rc["series"], mode="markers", name="after 7-day update",
+                                         marker=dict(size=12, color="#0F766E")))
+                fig.update_layout(title="Bias before and after a 7-day level update", xaxis_title="NMBE % (band = ±10 %)",
+                                  height=120 + 50 * len(rc), legend=dict(orientation="h", y=1.15), **TEMPLATE)
+                a.plotly_chart(fig, use_container_width=True)
+            sn = sn.assign(series=sn["zone"] + " · " + sn["load_type"]).sort_values("CV_change_pts").head(6)
+            fig = go.Figure()
+            fig.add_trace(go.Bar(x=sn["CV_all"], y=sn["series"], orientation="h", name="all hours", marker_color="#94A3B8"))
+            fig.add_trace(go.Bar(x=sn["CV_unflagged"], y=sn["series"], orientation="h", name="without flagged hours",
+                                 marker_color="#0284C7"))
+            fig.update_layout(title="Error with and without meter-fault hours", barmode="group", xaxis_type="log",
+                              xaxis_title="CV(RMSE) %, log scale", height=380, legend=dict(orientation="h", y=1.12), **TEMPLATE)
+            b.plotly_chart(fig, use_container_width=True)
+            st.caption("Left: forecast × (actual ÷ forecast over the previous 7 days), using only data known at midnight. "
+                       "When the dot moves into the band, the bias was a change in building use, not a model fault, "
+                       "and retraining or updating the model regularly removes it. Right: a big drop means meter faults, "
+                       "not the model, drive the error; those hours go to facilities as a maintenance task.")
+
+# ------------------------------------------------------------------ 7 floor-1 total (T30)
+with tab_tot:
+    tp = find(args.total)
+    if not os.path.exists(tp):
+        st.info("T30 total forecast not found. Pass --total outputs_T30/T30_floor1_total_forecast_hourly.csv.")
+    else:
+        tt = pd.read_csv(tp, parse_dates=["timestamp"])
+        tt["local"] = tt["timestamp"].dt.tz_convert("Europe/Madrid")
+        tt["split"] = np.where(tt["timestamp"] < pd.Timestamp("2023-01-01", tz="UTC"), "validation", "test_2023")
+        tsp = st.radio("Period", ["validation", "test_2023"], format_func=SPLIT_NAME.get, horizontal=True, key="tot_split")
+        tt = tt[tt["split"] == tsp]
+        METH = {"seasonal_naive": "Naive (same hour yesterday)", "direct_total_model": "Direct total model",
+                "bottom_up": "Bottom-up (sum of series)", "reconciled_mint": "Reconciled (MinT)"}
+        meth = [m_ for m_ in METH if m_ in tt.columns]
+        c1, c2 = st.columns([1, 2])
+        res = c1.radio("Resolution", ["Daily (kWh)", "Hourly (Wh)"], horizontal=True, key="tot_res")
+        chosen = c2.multiselect("Forecasts", meth, default=[x for x in ["seasonal_naive", "reconciled_mint"] if x in meth],
+                                format_func=METH.get)
+        if res.startswith("Daily"):
+            tt["day"] = tt["local"].dt.tz_localize(None).dt.floor("D")
+            g = tt.groupby("day").agg(n=("actual_wh", "count"), **{c: (c, "sum") for c in ["actual_wh"] + meth})
+            g = g[g["n"] >= 20].drop(columns="n") / 1000
+            x = g.index
+        else:
+            g = tt.set_index(tt["local"].dt.tz_localize(None))[["actual_wh"] + meth]
+            x = g.index
+        rows = []
+        for m_ in meth:
+            r = metrics(g["actual_wh"], g[m_])
+            r["forecast"] = METH[m_]
+            rows.append(r)
+        mt = pd.DataFrame(rows)
+        nv = mt.loc[mt["forecast"] == METH.get("seasonal_naive"), "RMSE"]
+        mt["Skill"] = 1 - mt["RMSE"] / nv.iloc[0] if len(nv) else np.nan
+        best = mt[mt["forecast"] == METH.get("reconciled_mint")]
+        if len(best):
+            k1, k2, k3 = st.columns(3)
+            k1.metric("CV(RMSE) reconciled", f"{best['CV_RMSE'].iloc[0]:.1f} %")
+            k2.metric("Skill vs naive", f"{best['Skill'].iloc[0]:+.2f}")
+            k3.metric("Bias (NMBE)", f"{best['NMBE'].iloc[0]:+.1f} %")
+        fig = go.Figure(go.Scatter(x=x, y=g["actual_wh"], name="Actual", line=dict(color=ACTUAL, width=2)))
+        pal = {"seasonal_naive": "#94A3B8", "direct_total_model": "#4F46E5", "bottom_up": "#0D9488", "reconciled_mint": "#EA580C"}
+        for m_ in chosen:
+            fig.add_trace(go.Scatter(x=x, y=g[m_], name=METH[m_], line=dict(color=pal.get(m_), width=1.6, dash="dot")))
+        fig.update_layout(title="Floor-1 total: actual vs forecast", height=420, hovermode="x unified",
+                          yaxis_title="kWh per day" if res.startswith("Daily") else "Wh per hour",
+                          legend=dict(orientation="h", y=1.1), xaxis=dict(rangeslider=dict(visible=True)), **TEMPLATE)
+        st.plotly_chart(fig, use_container_width=True)
+        st.dataframe(mt[["forecast", "n", "CV_RMSE", "NMBE", "MAE", "Skill"]].rename(
+            columns={"CV_RMSE": "CV(RMSE) %", "NMBE": "NMBE %", "n": "points",
+                     "MAE": "MAE (kWh)" if res.startswith("Daily") else "MAE (Wh)"})
+                     .style.format({"CV(RMSE) %": "{:.1f}", "NMBE %": "{:+.1f}", "MAE (kWh)": "{:.1f}",
+                                    "MAE (Wh)": "{:,.0f}", "Skill": "{:+.2f}"}, na_rep="—"),
+                     use_container_width=True, hide_index=True)
+        st.caption("The floor total is what the building manager buys energy for. Reconciliation (MinT) makes the "
+                   "series forecasts add up to the total forecast, so zone and floor numbers never contradict each other. "
+                   "Days need 20 or more hours. Source: T30 (Marie Heyse).")

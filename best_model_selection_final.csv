@@ -1,0 +1,15 @@
+zone,load_type,best_model,candidates,selection_hours,sel_cv_best,sel_cv_naive_day,sel_cv_catboost,sel_cv_catboost_no2020,sel_cv_chronos_bolt_base,sel_cv_gbm,sel_cv_hybrid_chronos_gbm_learned_weights,sel_cv_lightgbm,sel_cv_random_forest,sel_cv_random_forest_no2020
+NE,HVAC,gbm,8,1813,325.35,461.09,325.86,325.84,325.76,325.35,325.42,325.86,325.82,325.73
+NE,Plugs & Sockets,gbm,8,1813,23.24,50.33,57.84,64.05,42.78,23.24,34.16,57.7,54.52,56.07
+NW,Emerg. Lighting,chronos_bolt_base,5,1630,2.7,3.46,8.34,9.43,2.7,,,,5.2,11.21
+NW,HVAC,chronos_bolt_base,8,1606,19.12,23.55,34.2,31.56,19.12,31.25,34.93,28.35,28.4,27.73
+NW,Lighting,hybrid_chronos_gbm_learned_weights,8,1813,64.35,93.14,90.11,87.69,65.45,84.82,64.35,90.39,111.24,90.27
+NW,Plugs & Sockets,gbm,8,1813,37.88,63.99,47.96,48.02,48.76,37.88,52.83,49.17,48.96,48.49
+NW,RACK,chronos_bolt_base,5,1837,0.74,1.03,8.15,15.46,0.74,,,,1.69,1.76
+SE,Emerg. Lighting,chronos_bolt_base,5,1612,12.74,19.93,27.78,27.68,12.74,,,,27.52,27.54
+SE,HVAC,chronos_bolt_base,8,1136,21.86,41.27,44.7,45.25,21.86,36.38,26.12,42.74,42.65,43.46
+SE,Lighting,hybrid_chronos_gbm_learned_weights,8,1071,193.67,373.34,292.77,257.19,263.63,248.49,193.67,314.54,301.3,288.93
+SE,Plugs & Sockets,hybrid_chronos_gbm_learned_weights,8,1258,124.11,132.43,127.27,206.14,125.79,141.77,124.11,131.76,132.93,125.39
+SW,Emerg. Lighting,chronos_bolt_base,5,1325,8.5,12.57,10.08,11.31,8.5,,,,10.33,10.14
+SW,Lighting,random_forest_no2020,8,642,440.06,864.08,462.64,464.75,496.38,570.03,826.34,469.5,495.51,440.06
+SW,Plugs & Sockets,chronos_bolt_base,8,717,7.11,11.67,29.77,32.96,7.11,22.35,10.87,21.68,31.8,27.15
