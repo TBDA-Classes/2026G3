@@ -394,3 +394,34 @@ These results are preliminary (quick mode) and should be repeated with the full 
 | **Extras** | • Task executed by Marie Heyse (Team B – Data Quality & Validation). Summary: `TeamB_Sprint3_results.md`. Files: `best_model_selection.csv`, `TeamB_evaluation_best_model.xlsx`, `TeamB_evaluation_all_models.xlsx`, figures `F13_best_model_vs_benchmark.png` and `F11_error_by_hour_best_model.png`. Code: `T36_combine_predictions.py`, `TeamB_select_best_model.py`, `team_b_eval.py`.<br>• Covers backlog items T28 (F2.2), T34 (F6.6) and T35 (F7.1); ready for T38 (F6.4, sheet *ASHRAE_table*) and T40 (F6.7, sheet *Sensitivity_flags*). |
 
 ---
+
+### Entry 21 — 11/11/2026
+
+| Field | Content |
+|---|---|
+| **Date** | 11/11/2026 |
+| **Dataset version** | v0.3 (`cedint_f1_hourly_clean.csv.gz`) |
+| **Cleaning steps** | • Filtered to `usable_for_model = 1`, target `energy_wh_model`; split aligned with T32 (train 2020-06 to 2022-06, val 2022-H2, test 2023 and 2025). |
+| **Model tested** | • **Forecast of zone NE without environmental sensors (F3.3 / T31)**: HistGradientBoosting anchored on `lag_24` with L1 loss, issued at 00:00 using lags ≥ 24 h (scenarios M0–M4, M0d, naive baselines). |
+| **Results obtained** | • **NE Plugs & Sockets** passes ASHRAE 14 in every period (val M1 25.2 %, test 2023 27.1 %, test 2025 8.3–8.9 %). **NE HVAC** passes on test 2025 (19.2–20.1 %) and fails on 2023 (11 spike hours carry 57.5 % of energy). Spatial proxies change CV(RMSE) by ≤ 3 pts.<br>• Files: `models/T31_ne_forecast.py`, `predictions_and_eval/T31_NE_results.xlsx`, `predictions_and_eval/T31_NE_predictions.csv`, `docs_and_slides/T31_NE_Forecast_Report.docx`, `figures/F_T31_1`–`6`. |
+| **Extras** | • Task executed by Riccardo Tardanico (backlog **F3.3** / T31). |
+
+### Entry 22 — 14/11/2026
+
+| Field | Content |
+|---|---|
+| **Date** | 14/11/2026 |
+| **Dataset version** | v0.4 (`data/T32_cedint_f1_model_ready.csv.gz`) + Open-Meteo weather (`data/openmeteo_madrid_hourly.csv`, T26) |
+| **Model tested** | • **Multi-day forecasts (F1.4 / T37)**: direct `GradientBoostingRegressor` for horizons 1, 2, 3, 5, and 7 days across NE, NW, SE HVAC, `FLOOR_TOTAL`, and `FLOOR_TOTAL_noSW`, with/without weather. |
+| **Results obtained** | • **CV(RMSE) % (GBM + weather, 1 d → 7 d):** NW HVAC 2023: 50.0 → 80.0 %; SE HVAC 2025: 42.8 → 43.9 %; NE HVAC 2025: 18.3 → 20.1 %; `FLOOR_TOTAL_noSW` 2025: 28.3 → 32.5 %. Beats seasonal naive up to 7 d in 17/18 cases.<br>• **Leakage audit (`cleaning_and_eda/T37_check_gbm_leakage.py`):** identified target leakage in `roll_mean_24` inside `GBM_forallzones.ipynb` (NW HVAC 2023 shifts from 29.6 % to 49.6 % once shifted 24 h).<br>• Files: `models/T37_multihorizon_forecast.py`, `predictions_and_eval/T37_multihorizon_results.xlsx`, `predictions_and_eval/T37_multihorizon_predictions.csv.gz`, `figures/F37a`–`F37d`, `docs_and_slides/T37_REPORT.md`. |
+| **Extras** | • Task executed by Riccardo Tardanico (backlog **F1.4** / T37). |
+
+### Entry 23 — 24/11/2026
+
+| Field | Content |
+|---|---|
+| **Date** | 24/11/2026 |
+| **Dataset version** | v0.4 (`cedint_f1_hourly_clean.csv.gz`, `best_model_predictions_final.csv`, `predictions_and_eval/TeamB_T38_final_evaluation.xlsx`, `models/outputs_T30/T30_floor1_total_forecast_hourly.csv`) |
+| **Cleaning steps** | • Consolidated 150+ artifacts into the **DataPack v1.0** 7-folder structure (`data/`, `cleaning_and_eda/`, `models/`, `predictions_and_eval/`, `figures/`, `docs_and_slides/`, `archive/`) via `git mv`, leaving 7 core files at the root. |
+| **Results obtained** | • **Final Model Selection & Executive Summary (T38 / T42):** across 14 series (Chronos-Bolt 7, GBM 3, Hybrid 3, RF without 2020 1), positive skill over `naive_day` in 37/39 cases (median skill 0.31 val, 0.30 test 2023, 0.19 test 2025); MinT floor total 37.4 % vs 45.2 % naive on test 2023.<br>• Summary published in `docs_and_slides/CeDInt_F1_Results_Summary.md` and Streamlit dashboard (`T36_dashboard_app.py`) validated end-to-end. |
+| **Extras** | • Executed by Team G3 (Marie Heyse, Riccardo Tardanico, Anthony Rivière, Ludovica, María Herraiz). |

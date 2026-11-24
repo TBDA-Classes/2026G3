@@ -593,26 +593,24 @@ Removing hours with quality flags changes some scores a lot (best model, validat
 
 Deployment turns the results into material the client can use.
 
-### 6.1 Dashboard prototype (T36)
+### 6.1 Interactive Dashboard & Final Evaluation Integration (T36 / T38 / T30)
 
-`T36_dashboard_app.py` is a Streamlit dashboard that runs locally in the browser on the clean dataset; the data itself is not stored in the repository. It has five tabs:
+`T36_dashboard_app.py` is an interactive Streamlit dashboard running locally on `cedint_f1_hourly_clean.csv.gz` and `best_model_predictions_final.csv`, integrated with `predictions_and_eval/TeamB_T38_final_evaluation.xlsx` and `models/outputs_T30/T30_floor1_total_forecast_hourly.csv`. It covers:
 
-1. **Overview** – energy by zone and load type and its share.
-2. **Consumption** – daily energy, average daily profile (working day, weekend, holiday) and monthly energy.
-3. **Drivers** – daily energy against indoor temperature, occupancy and light per series.
-4. **Forecast vs actual** – CV(RMSE), NMBE, MAE and ASHRAE pass/fail per model, period and series, one week of forecast vs actual, and a comparison of all models on the hours that every model forecast.
-5. **Data quality** – series ratings, usable hours and known sensor and meter problems.
+1. **Overview** – energy breakdown by zone and load type, share of consumption, and floor plans (`figures/proyectoedificio-planta-*.svg`).
+2. **Consumption** – daily energy, average daily profiles (working day, weekend, holiday), and monthly trends.
+3. **Drivers** – energy demand against indoor temperature, humidity, occupancy, and luminosity.
+4. **Forecast vs Actual & Best-Model Scorecard** – load-type targets, best-model selection per series (7 Chronos-Bolt, 3 GBM, 3 Hybrid, 1 RF without 2020; median skill 0.30 on test 2023 and 0.19 on test 2025), reconciled Floor 1 totals (T30 MinT), sensorless NE analysis (T31), multi-horizon outlook (T37), and bias/skill alerts.
+5. **Data Quality** – series reliability ratings, usable hours, and documented sensor/meter anomalies.
 
-`T36_combine_predictions.py` merges the predictions of all models into one file for the dashboard and the evaluation.
+### 6.2 Repository Architecture & Reproducibility (`DataPack v1.0`)
 
-### 6.2 Reproducibility
+The repository is organized into 7 thematic folders (`data/`, `cleaning_and_eda/`, `models/`, `predictions_and_eval/`, `figures/`, `docs_and_slides/`, `archive/`) with full Git rename history preserved and only 7 essential files at the root.
 
-Every step can be rerun from the raw files: `clean_cedint.py` (clean dataset), `make_figures.py` (figures), `T32_make_training_data.py` (model-ready data), the model scripts, `T36_combine_predictions.py`, `TeamB_select_best_model.py` and `team_b_eval.py` (evaluation). Experiments are recorded in `EXPERIMENT_LOGBOOK.md`.
+### 6.3 Remaining Delivery Milestones
 
-### 6.3 Still to deliver
+- Rehearsal (26–28 November) and 20-minute final presentation (30 November 2026);
+- One-page executive summary (`docs_and_slides/CeDInt_F1_Results_Summary.md` completed) / 2-minute walkthrough video;
+- Frozen **DataPack v1.0** submission in Moodle by 14 December 2026.
 
-- the 20-minute final presentation with 3–4 key visuals (rehearsal 26–28 November, presentation 30 November);
-- a 2-minute video or one-page summary;
-- the frozen DataPack v1.0 (code, data dictionary, logbook, this report, deck and dashboard) in the Moodle dropoff area by 14 December 2026.
-
-> **Phase 6 summary.** A working dashboard prototype and a reproducible pipeline exist. Open: the final deck, the summary and the DataPack v1.0.
+> **Phase 6 summary.** The production-ready Streamlit dashboard, standardized 7-folder repository structure, executive summary (T42), and reproducible pipeline (T26–T42) are complete and verified.
