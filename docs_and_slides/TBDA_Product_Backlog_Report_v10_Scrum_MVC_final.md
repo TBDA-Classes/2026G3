@@ -155,7 +155,7 @@ Team members: [List names here] (10 members total).
 
 | Feature (epic) | Person | Week 5 tasks that build it | How we accomplish it | Definition of done |
 | --- | --- | --- | --- | --- |
-| **F1 Forecast** | Joos Van Lommel | D1–D3 (S1); baselines, SARIMAX, LightGBM (S2–S3); feature variants from A | Chronological split (no shuffling); seasonal naive and linear-regression baselines; SARIMAX with exogenous drivers; LightGBM tuned with TimeSeriesSplit; target energy_wh, horizon 24 h | Forecast reproducible from one notebook, logged in the experiment log |
+| **F1 Forecast** | Joos Van Lommel; María Herraiz | D1–D3 (S1); baselines, SARIMAX, LightGBM (S2–S3); feature variants from A | Chronological split (no shuffling); seasonal naive and linear-regression baselines; SARIMAX with exogenous drivers; LightGBM tuned with TimeSeriesSplit; target energy_wh, horizon 24 h | Forecast reproducible from one notebook, logged in the experiment log |
 | **F2 Energy types** | Kacper Vogel; Joos Van Lommel | E2 (CRISP-DM phase 1); D3 model plan; open questions | Decision table (section 3) updated with the profiling results and the teacher’s answers | Table approved and referenced in the CRISP-DM report |
 | **F3 Spatial context** | Ludovica Verga; Maria Vittoria Cimaglia | A1, A2, A5; C1 | Zone code = floor + orientation (e.g. 1NE); one long table keyed by timestamp, zone and load type; environment stored once per zone | Any series traceable from plan to zone to forecast |
 | **F4 Past consumption** | Maria Vittoria Cimaglia | C1, C4; hypotheses H11, H12 | Profiles by hour, weekday, month; split working days, weekends, August; 2020 vs 2021–22 vs 2025 | Plots labelled and interpreted in the EDA notebook (≥ 10 plots) |
