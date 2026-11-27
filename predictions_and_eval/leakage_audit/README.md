@@ -1,0 +1,1 @@
+This folder contains the five notebooks documenting the forecasting leakage audit, timestamp correction, leak-free GBM predictions, Hybrid re-evaluation, and final model-selection audit for CeDInt Floor 1.
